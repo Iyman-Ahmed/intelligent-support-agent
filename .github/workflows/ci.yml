@@ -1,0 +1,57 @@
+name: CI — Tests & Lint
+
+on:
+  push:
+    branches: ["**"]          # Run on every branch push
+  pull_request:
+    branches: [main, master]  # Run on PRs targeting main
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout code ─────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Python setup ──────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # ── 3. Install dependencies ──────────────────────────────────────
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # ── 4. Lint with flake8 ──────────────────────────────────────────
+      - name: Lint (flake8)
+        run: |
+          pip install flake8
+          # Stop on syntax errors or undefined names; ignore line length
+          flake8 app/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Warnings only for other issues (don't fail the build)
+          flake8 app/ tests/ --count --exit-zero --max-line-length=120 --statistics
+
+      # ── 5. Run tests ─────────────────────────────────────────────────
+      - name: Run pytest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          API_KEY: test-key-ci
+          DEBUG: "true"
+        run: |
+          pip install pytest pytest-asyncio
+          pytest tests/ -v --tb=short --asyncio-mode=auto
+
+      # ── 6. Check syntax of all Python files ──────────────────────────
+      - name: Syntax check
+        run: |
+          python -m py_compile app/main.py
+          python -m py_compile app/agent/core.py
+          python -m py_compile app/agent/tools.py
+          python -m py_compile app/agent/escalation.py
+          python -m py_compile app.py
+          echo "✅ All files compile cleanly"

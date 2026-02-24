@@ -1,0 +1,50 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile"
+  },
+  "deploy": {
+    "startCommand": "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 30,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 3
+  },
+  "environments": {
+    "production": {
+      "variables": {
+        "DEBUG": "false",
+        "WORKERS": "4"
+      }
+    },
+    "staging": {
+      "variables": {
+        "DEBUG": "true",
+        "WORKERS": "1"
+      }
+    }
+  },
+  "services": {
+    "web": {
+      "source": ".",
+      "variables": {
+        "PORT": "8000"
+      }
+    },
+    "redis": {
+      "image": "redis:7-alpine",
+      "volumes": ["/data:/data"],
+      "command": "redis-server --appendonly yes"
+    },
+    "postgres": {
+      "image": "postgres:16-alpine",
+      "variables": {
+        "POSTGRES_DB": "support_db",
+        "POSTGRES_USER": "support",
+        "POSTGRES_PASSWORD": "${{POSTGRES_PASSWORD}}"
+      },
+      "volumes": ["/var/lib/postgresql/data:/var/lib/postgresql/data"]
+    }
+  }
+}

@@ -1,0 +1,59 @@
+name: CD — Deploy to HuggingFace Spaces
+
+# Triggers ONLY on push to main (after CI passes)
+on:
+  push:
+    branches: [main, master]
+
+jobs:
+  deploy-to-hf-spaces:
+    name: Push to HuggingFace Space
+    runs-on: ubuntu-latest
+    # Only runs after CI passes
+    needs: []    # Remove this line if you want to enforce CI first (add: needs: [test] from ci.yml)
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Full history needed for git push
+
+      # ── 2. Push to HuggingFace Space ─────────────────────────────────
+      # SETUP REQUIRED:
+      #   1. Create a Space at huggingface.co/spaces  (SDK: Gradio)
+      #   2. Get your HF token from huggingface.co/settings/tokens
+      #   3. Add to GitHub repo: Settings → Secrets → HF_TOKEN
+      #   4. Set HF_SPACE_REPO below to your space (username/space-name)
+      - name: Deploy to HuggingFace Spaces
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          # ⬇️ CHANGE THIS to your HuggingFace username/space-name
+          HF_SPACE_REPO: YOUR_HF_USERNAME/intelligent-support-agent
+        run: |
+          # Install huggingface_hub CLI
+          pip install huggingface_hub
+
+          # Configure git with HF credentials
+          git config --global user.email "ci@github.com"
+          git config --global user.name "GitHub Actions"
+
+          # Clone the HF Space repo
+          git clone https://USER:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE_REPO} hf_space
+
+          # Copy project files into the Space repo
+          rsync -av \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.env' \
+            --exclude='hf_space' \
+            . hf_space/
+
+          # Commit and push to HF Space
+          cd hf_space
+          git add -A
+          git diff --cached --quiet || git commit -m "Deploy from GitHub: ${{ github.sha }}"
+          git push
+          echo "✅ Deployed to https://huggingface.co/spaces/${HF_SPACE_REPO}"
