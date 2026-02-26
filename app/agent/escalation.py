@@ -19,7 +19,8 @@ from app.models.conversation import Conversation, ConversationStatus
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL      = "gemini-2.0-flash"
+GEMINI_MODEL_LITE = "gemini-2.0-flash-lite"
 
 # ---------------------------------------------------------------------------
 # Escalation trigger patterns (rule-based)
@@ -142,12 +143,12 @@ class EscalationEngine:
         return EscalationDecision(should_escalate=False)
 
     async def _analyse_sentiment(self, text: str) -> Optional[dict]:
-        """Use Gemini Flash to score sentiment (free tier)."""
+        """Use Gemini Flash Lite to score sentiment (higher free quota)."""
         if not self.client:
             return None
         try:
             response = await self.client.aio.models.generate_content(
-                model=GEMINI_MODEL,
+                model=GEMINI_MODEL_LITE,
                 contents=[
                     types.Content(
                         role="user",

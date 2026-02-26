@@ -42,7 +42,8 @@ logger = logging.getLogger(__name__)
 # Configuration
 # ---------------------------------------------------------------------------
 
-GEMINI_MODEL    = "gemini-2.0-flash"       # Free tier: 1,500 req/day, 1M TPM
+GEMINI_MODEL         = "gemini-2.0-flash"       # Free tier: 1,500 req/day, 1M TPM
+GEMINI_MODEL_LITE    = "gemini-2.0-flash-lite"  # Fallback: higher free quota
 MAX_TOKENS      = 1024
 MAX_TOOL_ITERATIONS  = 10
 CONTEXT_WINDOW_TURNS = 20
@@ -249,48 +250,62 @@ class SupportAgentCore:
     # ------------------------------------------------------------------
 
     async def _call_gemini(self, contents: list):
-        for attempt in range(3):
-            try:
-                response = await self.client.aio.models.generate_content(
-                    model=GEMINI_MODEL,
-                    contents=contents,
-                    config=types.GenerateContentConfig(
-                        system_instruction=SUPPORT_AGENT_SYSTEM_PROMPT,
-                        tools=GEMINI_TOOLS,
-                        max_output_tokens=MAX_TOKENS,
-                        temperature=0.3,
-                    ),
-                )
-                return response
+        import re as _re
 
-            except Exception as exc:
-                err_str = str(exc)
+        # Try primary model first, fall back to lite model on quota errors
+        models_to_try = [GEMINI_MODEL, GEMINI_MODEL_LITE]
 
-                # 429 quota exhausted — check for free-tier limit: 0
-                if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
-                    if "limit: 0" in err_str or "free_tier" in err_str:
+        for model in models_to_try:
+            for attempt in range(3):
+                try:
+                    response = await self.client.aio.models.generate_content(
+                        model=model,
+                        contents=contents,
+                        config=types.GenerateContentConfig(
+                            system_instruction=SUPPORT_AGENT_SYSTEM_PROMPT,
+                            tools=GEMINI_TOOLS,
+                            max_output_tokens=MAX_TOKENS,
+                            temperature=0.3,
+                        ),
+                    )
+                    return response
+
+                except Exception as exc:
+                    err_str = str(exc)
+
+                    # 401 / invalid key — fail immediately, no point retrying
+                    if "400" in err_str and "API_KEY_INVALID" in err_str:
                         raise RuntimeError(
-                            "❌ **Gemini free-tier quota not available for this API key.**\n\n"
-                            "Your key appears to be from a Google Cloud project with billing enabled "
-                            "— free tier only works with keys from **Google AI Studio**.\n\n"
-                            "**Fix:** Go to https://aistudio.google.com/apikey → "
-                            "Create API key in new project → update GEMINI_API_KEY in your HF Space secrets."
+                            "❌ Invalid Gemini API key.\n"
+                            "Go to https://aistudio.google.com/apikey, create a new key, "
+                            "and update GEMINI_API_KEY in your HF Space secrets."
                         ) from exc
 
-                    # Temporary rate limit — parse retry-after and wait
-                    import re as _re
-                    m = _re.search(r"retry in ([\d.]+)s", err_str)
-                    wait = float(m.group(1)) + 0.5 if m else (2 ** attempt)
-                    logger.warning("Rate limited (attempt %d), retrying in %.1fs", attempt + 1, wait)
-                    await asyncio.sleep(wait)
-                    continue
+                    # 429 rate limit — respect retry-after, then try next model
+                    if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                        m = _re.search(r"retry in ([\d.]+)s", err_str)
+                        wait = float(m.group(1)) + 0.5 if m else (2 ** (attempt + 1))
+                        logger.warning(
+                            "Rate limited on %s (attempt %d), waiting %.1fs",
+                            model, attempt + 1, wait,
+                        )
+                        await asyncio.sleep(min(wait, 15))  # cap at 15s
+                        if attempt == 2:
+                            # Exhausted retries on this model → try next model
+                            logger.warning("Switching from %s to fallback model", model)
+                            break
+                        continue
 
-                if attempt == 2:
-                    raise RuntimeError(f"Gemini API unavailable after 3 attempts: {exc}") from exc
+                    # Other errors — retry with backoff
+                    if attempt == 2:
+                        logger.error("Gemini error on %s: %s", model, exc)
+                        break  # try next model
+                    await asyncio.sleep(2 ** attempt)
 
-                wait = 2 ** attempt
-                logger.warning("Gemini API error (attempt %d): %s — retrying in %ss", attempt + 1, exc, wait)
-                await asyncio.sleep(wait)
+        raise RuntimeError(
+            "⚠️ Gemini API is temporarily unavailable or rate limited. "
+            "Please wait a moment and try again."
+        )
 
     # ------------------------------------------------------------------
     # History → Gemini contents
