@@ -117,18 +117,7 @@ class EscalationEngine:
                 trigger_type="turn_limit",
             )
 
-        # 6. Sentiment analysis via Gemini Flash
-        sentiment = await self._analyse_sentiment(latest_user_message)
-        if sentiment and sentiment.get("score", 0) < -0.7:
-            return EscalationDecision(
-                should_escalate=True,
-                reason="Highly negative customer sentiment detected",
-                urgency="high",
-                trigger_type="sentiment",
-                sentiment_score=sentiment.get("score"),
-            )
-
-        # 7. Frustration keywords (lighter rule)
+        # 6. Frustration keywords (rule-based — no LLM call needed)
         frustration_count = sum(
             1 for p in self._frustration_re if p.search(latest_user_message)
         )
@@ -141,6 +130,10 @@ class EscalationEngine:
             )
 
         return EscalationDecision(should_escalate=False)
+
+        # NOTE: LLM sentiment analysis removed — it consumed an extra API call
+        # per message and caused rate-limit errors on the free tier (15 RPM).
+        # Rule-based checks above cover the vast majority of escalation cases.
 
     async def _analyse_sentiment(self, text: str) -> Optional[dict]:
         """Use Gemini Flash Lite to score sentiment (higher free quota)."""

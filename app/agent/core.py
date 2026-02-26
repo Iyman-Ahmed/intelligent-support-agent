@@ -186,14 +186,22 @@ class SupportAgentCore:
         tool_records: List[ToolCallRecord] = []
 
         for _ in range(MAX_TOOL_ITERATIONS):
-            response  = await self._call_gemini(contents)
+            response = await self._call_gemini(contents)
+
+            # Guard: no candidates (safety filter or empty response)
+            if not response.candidates:
+                return "I'm sorry, I wasn't able to generate a response. Please try rephrasing.", tool_records
+
             candidate = response.candidates[0]
             parts     = candidate.content.parts if candidate.content else []
 
+            # In google-genai SDK, every Part has a function_call attribute —
+            # check .name to distinguish real function calls from empty defaults
             text_parts = [p.text for p in parts if getattr(p, "text", None)]
             fn_parts   = [
                 p for p in parts
-                if getattr(p, "function_call", None) is not None
+                if getattr(p, "function_call", None)
+                and getattr(p.function_call, "name", "")
             ]
 
             # No function calls → final answer
@@ -285,14 +293,13 @@ class SupportAgentCore:
                     # 429 rate limit — respect retry-after, then try next model
                     if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
                         m = _re.search(r"retry in ([\d.]+)s", err_str)
-                        wait = float(m.group(1)) + 0.5 if m else (2 ** (attempt + 1))
+                        wait = float(m.group(1)) + 1.0 if m else (5 * (attempt + 1))
                         logger.warning(
                             "Rate limited on %s (attempt %d), waiting %.1fs",
                             model, attempt + 1, wait,
                         )
-                        await asyncio.sleep(min(wait, 15))  # cap at 15s
+                        await asyncio.sleep(min(wait, 30))  # cap at 30s
                         if attempt == 2:
-                            # Exhausted retries on this model → try next model
                             logger.warning("Switching from %s to fallback model", model)
                             break
                         continue
@@ -366,14 +373,14 @@ class SupportAgentCore:
         )
 
     async def _generate_escalation_summary(self, conversation: Conversation) -> str:
-        """Generate a concise handoff summary using Gemini Flash."""
+        """Generate a concise handoff summary using the lite model to save quota."""
         try:
             history_text = "\n".join(
                 f"{m.role.upper()}: {m.content}"
                 for m in conversation.messages[-10:]
             )
             response = await self.client.aio.models.generate_content(
-                model=GEMINI_MODEL,
+                model=GEMINI_MODEL_LITE,
                 contents=[
                     types.Content(
                         role="user",
@@ -402,7 +409,7 @@ class SupportAgentCore:
                 f"{m.role.upper()}: {m.content}" for m in old_messages
             )
             response = await self.client.aio.models.generate_content(
-                model=GEMINI_MODEL,
+                model=GEMINI_MODEL_LITE,
                 contents=[
                     types.Content(
                         role="user",
