@@ -56,15 +56,16 @@ from app.services.ticket_service import TicketService
 from app.session_store import SessionStore
 
 # ---------------------------------------------------------------------------
-# Global agent — initialised once at startup using asyncio.run()
+# Global agent — lazily initialised inside Gradio's own event loop
 # ---------------------------------------------------------------------------
 
 _agent: SupportAgentCore | None = None
 _store: SessionStore | None = None
+_init_lock: asyncio.Lock | None = None   # created lazily (needs a running loop)
 
 
 async def _build_agent() -> tuple[SupportAgentCore, SessionStore]:
-    """Build and initialise all services. Runs once at startup."""
+    """Build and initialise all services."""
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise ValueError(
@@ -102,18 +103,27 @@ async def _build_agent() -> tuple[SupportAgentCore, SessionStore]:
     return agent, store
 
 
-def _startup() -> None:
-    """Run async init at module load time — before Gradio's event loop starts."""
-    global _agent, _store
-    try:
-        _agent, _store = asyncio.run(_build_agent())
-        print("✅ Agent initialised successfully")
-    except Exception as exc:
-        print(f"⚠️  Agent init failed: {exc}")
-        print("    Make sure ANTHROPIC_API_KEY is set.")
+async def _ensure_agent() -> None:
+    """Initialise the agent on first call, inside the running event loop."""
+    global _agent, _store, _init_lock
 
+    # Fast path — already initialised
+    if _agent is not None:
+        return
 
-_startup()
+    # Create lock lazily inside the running loop
+    if _init_lock is None:
+        _init_lock = asyncio.Lock()
+
+    async with _init_lock:
+        if _agent is not None:   # double-checked locking
+            return
+        try:
+            _agent, _store = await _build_agent()
+            print("✅ Agent initialised successfully")
+        except Exception as exc:
+            print(f"⚠️  Agent init failed: {exc}")
+            raise
 
 
 # ---------------------------------------------------------------------------
@@ -148,10 +158,12 @@ async def chat(
     if not user_message.strip():
         return history, session_state, _status_html(session_state), _meta_html(session_state)
 
-    if _agent is None or _store is None:
+    try:
+        await _ensure_agent()
+    except Exception as exc:
         history = history + [
             {"role": "user", "content": user_message},
-            {"role": "assistant", "content": "⚠️ Agent not initialised. Check ANTHROPIC_API_KEY."},
+            {"role": "assistant", "content": f"⚠️ Agent failed to initialise: {exc}\n\nMake sure ANTHROPIC_API_KEY is set."},
         ]
         return history, session_state, _status_html(session_state), _meta_html(session_state)
 
@@ -367,6 +379,9 @@ with gr.Blocks(
             ],
             outputs=_outputs,
         )
+
+    # ── Warm-up: initialise the agent inside Gradio's AnyIO event loop ──
+    demo.load(fn=_ensure_agent, inputs=None, outputs=None)
 
 # ---------------------------------------------------------------------------
 # Launch
