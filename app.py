@@ -366,25 +366,29 @@ with gr.Blocks(
     _inputs  = [msg_input, chatbot, session_state, customer_dd]
     _outputs = [chatbot, session_state, status_display, meta_display]
 
-    send_btn.click(fn=chat, inputs=_inputs, outputs=_outputs).then(
+    # api_name=False on every handler → excluded from schema builder
+    # (prevents gradio_client TypeError on bool JSON Schema values)
+    send_btn.click(fn=chat, inputs=_inputs, outputs=_outputs,
+                   api_name=False).then(
         fn=lambda: gr.update(value=""), outputs=msg_input
     )
-    msg_input.submit(fn=chat, inputs=_inputs, outputs=_outputs).then(
+    msg_input.submit(fn=chat, inputs=_inputs, outputs=_outputs,
+                     api_name=False).then(
         fn=lambda: gr.update(value=""), outputs=msg_input
     )
-    reset_btn.click(fn=reset_chat, inputs=[customer_dd], outputs=_outputs)
+    reset_btn.click(fn=reset_chat, inputs=[customer_dd], outputs=_outputs,
+                    api_name=False)
 
     for btn, prompt_text in prompt_btns:
-        # functools.partial binds prompt_text so no hidden Textbox needed —
-        # avoids the gradio_client schema TypeError on bool values
         btn.click(
             fn=functools.partial(inject_prompt, prompt_text),
             inputs=[chatbot, session_state, customer_dd],
             outputs=_outputs,
+            api_name=False,
         )
 
     # Warm-up: init agent inside Gradio's AnyIO event loop
-    demo.load(fn=_ensure_agent, inputs=None, outputs=None)
+    demo.load(fn=_ensure_agent, api_name=False)
 
 
 # ---------------------------------------------------------------------------
@@ -396,4 +400,5 @@ if __name__ == "__main__":
         server_name="0.0.0.0",
         server_port=int(os.getenv("PORT", 7860)),
         show_error=True,
+        show_api=False,   # disables gradio_client schema builder → no TypeError
     )
