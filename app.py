@@ -10,8 +10,22 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 import time
+import types
 from typing import List
+
+# ---------------------------------------------------------------------------
+# Python 3.13 fix: audioop was removed; pydub (used by gradio) needs it.
+# We don't use any audio features, so a no-op mock is safe.
+# This MUST run before `import gradio`.
+# ---------------------------------------------------------------------------
+def _patch_audioop() -> None:
+    for mod_name in ("audioop", "pyaudioop"):
+        if mod_name not in sys.modules:
+            sys.modules[mod_name] = types.ModuleType(mod_name)
+
+_patch_audioop()
 
 import anthropic
 import gradio as gr
