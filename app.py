@@ -293,7 +293,7 @@ with gr.Blocks(
 
     gr.Markdown("""
     # 🤖 Intelligent Customer Support Agent
-    **Powered by Claude claude-sonnet-4-6** &nbsp;|&nbsp; Multi-turn memory &nbsp;|&nbsp;
+    **Powered by Claude Haiku** &nbsp;|&nbsp; Multi-turn memory &nbsp;|&nbsp;
     Tool use &nbsp;|&nbsp; Auto-escalation &nbsp;|&nbsp; Ticket creation
     """)
 
@@ -347,7 +347,7 @@ with gr.Blocks(
         gr.Markdown("""
         **On every message:**
         1. Escalation pre-check — legal keywords, human request, VIP flag
-        2. Claude claude-sonnet-4-6 processes message + full history with tools
+        2. Claude Haiku processes message + full history with tools
         3. Tool loop — Claude calls tools, reads results, continues until done
         4. Post-check — sentiment scored by Claude Haiku
 

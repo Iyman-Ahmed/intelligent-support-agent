@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 # ---------------------------------------------------------------------------
 
-PRIMARY_MODEL = "claude-sonnet-4-6-20250929"
+PRIMARY_MODEL = "claude-haiku-4-5-20251001"
 FALLBACK_MODEL = "claude-haiku-4-5-20251001"
 MAX_TOKENS = 1024
 MAX_TOOL_ITERATIONS = 10          # Safety cap on agentic loop iterations
