@@ -16,16 +16,42 @@ import types
 from typing import List
 
 # ---------------------------------------------------------------------------
-# Python 3.13 fix: audioop was removed; pydub (used by gradio) needs it.
-# We don't use any audio features, so a no-op mock is safe.
-# This MUST run before `import gradio`.
+# Compatibility patches — MUST run before `import gradio`
+#
+# 1. audioop: removed in Python 3.13; pydub (gradio dep) needs it.
+#    We use no audio features so an empty mock is safe.
+#
+# 2. HfFolder: removed in huggingface_hub >= 0.25; gradio.oauth needs it.
+#    We stub it out so oauth.py can import without crashing.
 # ---------------------------------------------------------------------------
-def _patch_audioop() -> None:
+def _patch_compat() -> None:
+    # -- audioop / pyaudioop --------------------------------------------------
     for mod_name in ("audioop", "pyaudioop"):
         if mod_name not in sys.modules:
             sys.modules[mod_name] = types.ModuleType(mod_name)
 
-_patch_audioop()
+    # -- HfFolder -------------------------------------------------------------
+    try:
+        import huggingface_hub as _hfhub
+        if not hasattr(_hfhub, "HfFolder"):
+            class _HfFolderStub:
+                @staticmethod
+                def get_token():
+                    return (
+                        os.getenv("HF_TOKEN")
+                        or os.getenv("HUGGING_FACE_HUB_TOKEN")
+                    )
+                @staticmethod
+                def save_token(token: str) -> None:
+                    pass
+                @staticmethod
+                def delete_token() -> None:
+                    pass
+            _hfhub.HfFolder = _HfFolderStub
+    except ImportError:
+        pass
+
+_patch_compat()
 
 import anthropic
 import gradio as gr
