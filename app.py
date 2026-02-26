@@ -156,19 +156,26 @@ async def chat(
     session_state: dict,
     selected_customer: str,
 ) -> tuple:
+    """Main chat handler — always returns a response, never hangs."""
+    print(f"[CHAT] >>> Received: {user_message[:80]}")
+
     if not user_message.strip():
         return history, session_state, _status_html(session_state), _meta_html(session_state)
+
+    reply = "⚠️ Something went wrong — no response generated."  # safety default
 
     try:
         await _ensure_agent()
     except Exception as exc:
+        print(f"[CHAT] Agent init failed: {exc}")
+        reply = (
+            f"⚠️ **Agent failed to initialise:** {exc}\n\n"
+            "Make sure **GEMINI_API_KEY** is set in your Space secrets.\n"
+            "Get a free key at: https://aistudio.google.com/apikey"
+        )
         history = history + [
             {"role": "user", "content": user_message},
-            {"role": "assistant", "content": (
-                f"⚠️ **Agent failed to initialise:** {exc}\n\n"
-                "Make sure **GEMINI_API_KEY** is set in your Space secrets.\n"
-                "Get a free key at: https://aistudio.google.com/apikey"
-            )},
+            {"role": "assistant", "content": reply},
         ]
         return history, session_state, _status_html(session_state), _meta_html(session_state)
 
@@ -176,7 +183,7 @@ async def chat(
     session_id   = session_state.get("session_id")
     conversation = None
 
-    if session_id:
+    if session_id and _store:
         conversation = await _store.load(session_id)
 
     if not conversation:
@@ -192,10 +199,18 @@ async def chat(
     # Run agent
     start = time.monotonic()
     try:
+        print(f"[CHAT] Calling process_message...")
         reply, conversation = await _agent.process_message(conversation, user_message)
-        await _store.save(conversation)
+        print(f"[CHAT] Got reply: {reply[:120] if reply else '(empty)'}")
+        if _store:
+            await _store.save(conversation)
     except Exception as exc:
+        print(f"[CHAT] Agent error: {exc}")
         reply = f"⚠️ Agent error: {exc}"
+
+    # Ensure reply is never empty
+    if not reply or not reply.strip():
+        reply = "I received your message but wasn't able to generate a response. Please try again."
 
     elapsed = round((time.monotonic() - start) * 1000)
 
@@ -218,6 +233,7 @@ async def chat(
         {"role": "user",      "content": user_message},
         {"role": "assistant", "content": reply},
     ]
+    print(f"[CHAT] <<< Returning {len(history)} messages, {elapsed}ms")
     return history, session_state, _status_html(session_state), _meta_html(session_state)
 
 
@@ -389,8 +405,9 @@ with gr.Blocks(
             api_name=False,
         )
 
-    # Warm-up: init agent inside Gradio's AnyIO event loop
-    demo.load(fn=_ensure_agent, api_name=False)
+    # NOTE: Removed demo.load() warm-up to prevent initialization on page load.
+    # Agent initializes on first user message instead (lazy loading).
+    # This prevents unnecessary API calls and respects rate limits.
 
 
 # ---------------------------------------------------------------------------
