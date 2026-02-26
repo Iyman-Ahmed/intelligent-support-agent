@@ -262,9 +262,32 @@ class SupportAgentCore:
                     ),
                 )
                 return response
+
             except Exception as exc:
+                err_str = str(exc)
+
+                # 429 quota exhausted — check for free-tier limit: 0
+                if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                    if "limit: 0" in err_str or "free_tier" in err_str:
+                        raise RuntimeError(
+                            "❌ **Gemini free-tier quota not available for this API key.**\n\n"
+                            "Your key appears to be from a Google Cloud project with billing enabled "
+                            "— free tier only works with keys from **Google AI Studio**.\n\n"
+                            "**Fix:** Go to https://aistudio.google.com/apikey → "
+                            "Create API key in new project → update GEMINI_API_KEY in your HF Space secrets."
+                        ) from exc
+
+                    # Temporary rate limit — parse retry-after and wait
+                    import re as _re
+                    m = _re.search(r"retry in ([\d.]+)s", err_str)
+                    wait = float(m.group(1)) + 0.5 if m else (2 ** attempt)
+                    logger.warning("Rate limited (attempt %d), retrying in %.1fs", attempt + 1, wait)
+                    await asyncio.sleep(wait)
+                    continue
+
                 if attempt == 2:
                     raise RuntimeError(f"Gemini API unavailable after 3 attempts: {exc}") from exc
+
                 wait = 2 ** attempt
                 logger.warning("Gemini API error (attempt %d): %s — retrying in %ss", attempt + 1, exc, wait)
                 await asyncio.sleep(wait)
