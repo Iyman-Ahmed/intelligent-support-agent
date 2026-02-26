@@ -1,12 +1,13 @@
 """
 AI Agent Core — the agentic loop that powers multi-turn conversations.
+Powered by Google Gemini 2.0 Flash (free tier).
 
 Flow:
   1. Load conversation history from session store
   2. Append new user message
-  3. Call Claude with tool_use enabled
-  4. If Claude returns tool_use blocks → dispatch tools → inject results → loop
-  5. When Claude returns end_turn (text only) → run escalation check → return
+  3. Call Gemini with function_calling enabled
+  4. If Gemini returns function_call parts → dispatch tools → inject results → loop
+  5. When Gemini returns text only → run escalation check → return
   6. Persist updated conversation
 """
 
@@ -15,9 +16,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
+import uuid
+from typing import Any, Dict, List, Optional, Tuple
 
-import anthropic
+from google import genai
+from google.genai import types
 
 from app.agent.escalation import EscalationEngine
 from app.agent.prompts import (
@@ -39,12 +42,58 @@ logger = logging.getLogger(__name__)
 # Configuration
 # ---------------------------------------------------------------------------
 
-PRIMARY_MODEL = "claude-haiku-4-5-20251001"
-FALLBACK_MODEL = "claude-haiku-4-5-20251001"
-MAX_TOKENS = 1024
-MAX_TOOL_ITERATIONS = 10          # Safety cap on agentic loop iterations
-CONTEXT_WINDOW_TURNS = 20        # Rolling window for history sent to Claude
-SUMMARISE_AFTER_TURNS = 30       # Compress history after this many turns
+GEMINI_MODEL    = "gemini-2.0-flash"       # Free tier: 1,500 req/day, 1M TPM
+MAX_TOKENS      = 1024
+MAX_TOOL_ITERATIONS  = 10
+CONTEXT_WINDOW_TURNS = 20
+SUMMARISE_AFTER_TURNS = 30
+
+
+# ---------------------------------------------------------------------------
+# Convert Anthropic-style tool schemas → Gemini FunctionDeclarations
+# ---------------------------------------------------------------------------
+
+def _build_gemini_tools() -> list:
+    """Convert the shared TOOL_DEFINITIONS to google-genai Tool objects."""
+
+    _TYPE_MAP = {
+        "string":  types.Type.STRING,
+        "integer": types.Type.INTEGER,
+        "number":  types.Type.NUMBER,
+        "boolean": types.Type.BOOLEAN,
+        "array":   types.Type.ARRAY,
+        "object":  types.Type.OBJECT,
+    }
+
+    def _convert_schema(schema: Dict[str, Any]) -> types.Schema:
+        t = _TYPE_MAP.get(schema.get("type", "string"), types.Type.STRING)
+        kwargs: Dict[str, Any] = {
+            "type": t,
+            "description": schema.get("description", ""),
+        }
+        if "enum" in schema:
+            kwargs["enum"] = schema["enum"]
+        if "properties" in schema:
+            kwargs["properties"] = {
+                k: _convert_schema(v) for k, v in schema["properties"].items()
+            }
+        if "required" in schema:
+            kwargs["required"] = schema["required"]
+        return types.Schema(**kwargs)
+
+    declarations = []
+    for tool in TOOL_DEFINITIONS:
+        declarations.append(
+            types.FunctionDeclaration(
+                name=tool["name"],
+                description=tool["description"],
+                parameters=_convert_schema(tool["input_schema"]),
+            )
+        )
+    return [types.Tool(function_declarations=declarations)]
+
+
+GEMINI_TOOLS = _build_gemini_tools()
 
 
 # ---------------------------------------------------------------------------
@@ -54,17 +103,17 @@ SUMMARISE_AFTER_TURNS = 30       # Compress history after this many turns
 class SupportAgentCore:
     """
     Orchestrates the full agentic loop:
-    message → Claude → tool calls → Claude → … → final response
+    message → Gemini → function calls → Gemini → … → final response
     """
 
     def __init__(
         self,
-        anthropic_client: anthropic.AsyncAnthropic,
+        gemini_client: genai.Client,
         tool_dispatcher: ToolDispatcher,
         escalation_engine: EscalationEngine,
-        session_store=None,          # Optional: Redis-backed session store
+        session_store=None,
     ):
-        self.client = anthropic_client
+        self.client     = gemini_client
         self.dispatcher = tool_dispatcher
         self.escalation = escalation_engine
         self.session_store = session_store
@@ -78,27 +127,19 @@ class SupportAgentCore:
         conversation: Conversation,
         user_message: str,
     ) -> Tuple[str, Conversation]:
-        """
-        Process a new user message through the full agent loop.
-        Returns (assistant_reply_text, updated_conversation).
-        """
         start_time = time.monotonic()
 
-        # 1. Check for escalation BEFORE running the agent
+        # 1. Pre-escalation check
         escalation_decision = await self.escalation.evaluate(
             conversation, user_message
         )
 
-        # 2. Append user message to history
+        # 2. Append user message
         conversation.add_message(MessageRole.USER, user_message)
 
-        # 3. Handle pre-escalation (legal keywords, explicit human request)
-        if escalation_decision.should_escalate and escalation_decision.trigger_type in (
-            "rule",
-        ):
-            reply = await self._handle_escalation(
-                conversation, escalation_decision
-            )
+        # 3. Immediate rule-based escalation
+        if escalation_decision.should_escalate and escalation_decision.trigger_type == "rule":
+            reply = await self._handle_escalation(conversation, escalation_decision)
             conversation.add_message(MessageRole.ASSISTANT, reply)
             self._record_timing(conversation, start_time)
             return reply, conversation
@@ -106,7 +147,7 @@ class SupportAgentCore:
         # 4. Run agentic loop
         reply, tool_records = await self._agent_loop(conversation)
 
-        # 5. Post-response escalation check (sentiment, turn limit)
+        # 5. Post-response escalation check (sentiment / turn limit)
         if not escalation_decision.should_escalate:
             escalation_decision = await self.escalation.evaluate(
                 conversation, user_message
@@ -131,167 +172,125 @@ class SupportAgentCore:
 
         return reply, conversation
 
-    async def stream_message(
-        self,
-        conversation: Conversation,
-        user_message: str,
-    ) -> AsyncGenerator[str, None]:
-        """
-        Streaming variant — yields text chunks as they arrive.
-        Full tool-use loop runs synchronously first, then streams final text.
-        (True streaming with mid-loop tool use requires more complex handling.)
-        """
-        reply, updated_conv = await self.process_message(conversation, user_message)
-        # Simulate streaming by yielding words
-        for word in reply.split(" "):
-            yield word + " "
-            await asyncio.sleep(0.02)
-
     # ------------------------------------------------------------------
-    # Agentic Loop
+    # Agentic loop
     # ------------------------------------------------------------------
 
     async def _agent_loop(
         self,
         conversation: Conversation,
     ) -> Tuple[str, List[ToolCallRecord]]:
-        """
-        Core agentic loop.
-        Runs until Claude stops calling tools (stop_reason == "end_turn").
-        """
-        messages = conversation.to_claude_messages(max_turns=CONTEXT_WINDOW_TURNS)
+        contents     = self._build_contents(conversation)
         tool_records: List[ToolCallRecord] = []
-        iterations = 0
 
-        while iterations < MAX_TOOL_ITERATIONS:
-            iterations += 1
-            response = await self._call_claude(messages, use_fallback=(iterations > 1))
+        for _ in range(MAX_TOOL_ITERATIONS):
+            response  = await self._call_gemini(contents)
+            candidate = response.candidates[0]
+            parts     = candidate.content.parts if candidate.content else []
 
-            stop_reason = response.stop_reason
+            text_parts = [p.text for p in parts if getattr(p, "text", None)]
+            fn_parts   = [
+                p for p in parts
+                if getattr(p, "function_call", None) is not None
+            ]
 
-            # --- Extract text and tool_use blocks ---
-            text_blocks = []
-            tool_use_blocks = []
-            for block in response.content:
-                if block.type == "text":
-                    text_blocks.append(block.text)
-                elif block.type == "tool_use":
-                    tool_use_blocks.append(block)
+            # No function calls → final answer
+            if not fn_parts:
+                return (
+                    " ".join(text_parts).strip()
+                    or "I'm sorry, I had trouble processing your request. Please try again.",
+                    tool_records,
+                )
 
-            # --- No tool calls → final answer ---
-            if stop_reason == "end_turn" and not tool_use_blocks:
-                final_text = "\n".join(text_blocks).strip()
-                return final_text, tool_records
+            # Append model's response (including function_call parts) to history
+            contents.append(candidate.content)
 
-            # --- Process tool calls ---
-            if tool_use_blocks:
-                # Append assistant message (may include partial text + tool_use blocks)
-                messages.append({
-                    "role": "assistant",
-                    "content": response.content
-                })
+            # Dispatch all tool calls in parallel
+            async def _run(part):
+                fc     = part.function_call
+                result = await self.dispatcher.dispatch(
+                    tool_name=fc.name,
+                    tool_input=dict(fc.args or {}),
+                    session_id=conversation.session_id,
+                )
+                record = ToolCallRecord(
+                    tool_use_id=str(uuid.uuid4()),
+                    tool_name=fc.name,
+                    inputs=dict(fc.args or {}),
+                    output=result,
+                    success=result.get("_success", True),
+                    latency_ms=result.get("_latency_ms"),
+                )
+                tool_records.append(record)
+                return types.Part(
+                    function_response=types.FunctionResponse(
+                        name=fc.name,
+                        response=result,
+                    )
+                )
 
-                # Dispatch all tool calls (in parallel)
-                tool_results = await asyncio.gather(*[
-                    self._dispatch_and_record(block, conversation.session_id, tool_records)
-                    for block in tool_use_blocks
-                ])
+            fn_response_parts = await asyncio.gather(*[_run(p) for p in fn_parts])
 
-                # Append tool results back to messages
-                messages.append({
-                    "role": "user",
-                    "content": tool_results
-                })
-                continue
-
-            # --- Unexpected stop ---
-            final_text = "\n".join(text_blocks).strip() or (
-                "I'm sorry, I encountered an unexpected issue. "
-                "Please try again or contact our support team directly."
+            # Inject tool results back as a "user" turn
+            contents.append(
+                types.Content(role="user", parts=list(fn_response_parts))
             )
-            return final_text, tool_records
 
-        # Safety: exceeded max iterations
-        logger.warning("Agent loop exceeded max iterations for session")
+        # Exceeded max iterations
+        logger.warning("Agent loop exceeded max iterations for session %s", conversation.session_id)
         return (
-            "I've been working on your issue but need a moment more. "
+            "I've been working on your issue but it's taking longer than expected. "
             "Let me connect you with a human agent who can help right away.",
             tool_records,
         )
 
-    async def _dispatch_and_record(
-        self,
-        tool_use_block,
-        session_id: str,
-        tool_records: List[ToolCallRecord],
-    ) -> Dict[str, Any]:
-        """Dispatch a single tool call, record it, and return the tool_result block."""
-        result = await self.dispatcher.dispatch(
-            tool_name=tool_use_block.name,
-            tool_input=tool_use_block.input,
-            session_id=session_id,
-        )
-
-        record = ToolCallRecord(
-            tool_use_id=tool_use_block.id,
-            tool_name=tool_use_block.name,
-            inputs=tool_use_block.input,
-            output=result,
-            success=result.get("_success", True),
-            latency_ms=result.get("_latency_ms"),
-        )
-        tool_records.append(record)
-
-        return {
-            "type": "tool_result",
-            "tool_use_id": tool_use_block.id,
-            "content": str(result),
-        }
-
     # ------------------------------------------------------------------
-    # Claude API call with fallback
+    # Gemini API call
     # ------------------------------------------------------------------
 
-    async def _call_claude(
-        self,
-        messages: List[Dict],
-        use_fallback: bool = False,
-    ):
-        """Call Claude API with primary model, falling back to Haiku on error."""
-        model = FALLBACK_MODEL if use_fallback else PRIMARY_MODEL
-
+    async def _call_gemini(self, contents: list):
         for attempt in range(3):
             try:
-                response = await self.client.messages.create(
-                    model=model,
-                    max_tokens=MAX_TOKENS,
-                    system=SUPPORT_AGENT_SYSTEM_PROMPT,
-                    tools=TOOL_DEFINITIONS,
-                    messages=messages,
+                response = await self.client.aio.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=SUPPORT_AGENT_SYSTEM_PROMPT,
+                        tools=GEMINI_TOOLS,
+                        max_output_tokens=MAX_TOKENS,
+                        temperature=0.3,
+                    ),
                 )
                 return response
-
-            except anthropic.RateLimitError:
-                wait = 2 ** attempt
-                logger.warning("Rate limit hit, retrying in %ss", wait)
-                await asyncio.sleep(wait)
-
-            except (anthropic.APITimeoutError, anthropic.APIConnectionError) as exc:
+            except Exception as exc:
                 if attempt == 2:
-                    if model == PRIMARY_MODEL:
-                        logger.warning("Primary model failed, switching to fallback")
-                        model = FALLBACK_MODEL
-                        attempt = -1     # Reset retry counter for fallback
-                    else:
-                        raise RuntimeError(
-                            "Both primary and fallback models unavailable"
-                        ) from exc
+                    raise RuntimeError(f"Gemini API unavailable after 3 attempts: {exc}") from exc
                 wait = 2 ** attempt
+                logger.warning("Gemini API error (attempt %d): %s — retrying in %ss", attempt + 1, exc, wait)
                 await asyncio.sleep(wait)
 
-            except anthropic.APIError as exc:
-                logger.error("Claude API error: %s", exc)
-                raise
+    # ------------------------------------------------------------------
+    # History → Gemini contents
+    # ------------------------------------------------------------------
+
+    def _build_contents(self, conversation: Conversation) -> list:
+        """Convert the conversation's message history to Gemini Content objects."""
+        history = [
+            m for m in conversation.messages
+            if m.role in (MessageRole.USER, MessageRole.ASSISTANT)
+        ]
+        history = history[-CONTEXT_WINDOW_TURNS:]
+
+        contents = []
+        for msg in history:
+            role = "model" if msg.role == MessageRole.ASSISTANT else "user"
+            contents.append(
+                types.Content(
+                    role=role,
+                    parts=[types.Part(text=msg.content or "…")],
+                )
+            )
+        return contents
 
     # ------------------------------------------------------------------
     # Escalation handler
@@ -303,15 +302,13 @@ class SupportAgentCore:
         decision,
         agent_reply: Optional[str] = None,
     ) -> str:
-        """Update conversation state and build escalation response."""
-        conversation.status = ConversationStatus.ESCALATED
+        conversation.status           = ConversationStatus.ESCALATED
         conversation.escalation_reason = decision.reason
 
-        # Call the escalate_to_human tool to actually route to queue
         await self.dispatcher.dispatch(
             tool_name="escalate_to_human",
             tool_input={
-                "reason": decision.reason,
+                "reason":  decision.reason,
                 "urgency": decision.urgency,
                 "summary": await self._generate_escalation_summary(conversation),
             },
@@ -330,31 +327,29 @@ class SupportAgentCore:
         )
 
     async def _generate_escalation_summary(self, conversation: Conversation) -> str:
-        """Generate a concise handoff summary using Claude Haiku."""
-        if not self.client:
-            return f"Session {conversation.session_id} escalated after {conversation.turn_count} turns."
+        """Generate a concise handoff summary using Gemini Flash."""
         try:
             history_text = "\n".join(
                 f"{m.role.upper()}: {m.content}"
                 for m in conversation.messages[-10:]
             )
-            response = await self.client.messages.create(
-                model=FALLBACK_MODEL,
-                max_tokens=300,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            f"{ESCALATION_SUMMARY_PROMPT}\n\n"
-                            f"--- CONVERSATION ---\n{history_text}"
-                        )
-                    }
-                ]
+            response = await self.client.aio.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=[
+                    types.Content(
+                        role="user",
+                        parts=[types.Part(text=f"{ESCALATION_SUMMARY_PROMPT}\n\n--- CONVERSATION ---\n{history_text}")],
+                    )
+                ],
+                config=types.GenerateContentConfig(max_output_tokens=300),
             )
-            return response.content[0].text.strip()
+            return response.text.strip()
         except Exception as exc:
             logger.warning("Summary generation failed: %s", exc)
-            return f"Session {conversation.session_id} — {conversation.turn_count} turns — {conversation.escalation_reason}"
+            return (
+                f"Session {conversation.session_id} — "
+                f"{conversation.turn_count} turns — {conversation.escalation_reason}"
+            )
 
     # ------------------------------------------------------------------
     # Context compression
@@ -367,17 +362,17 @@ class SupportAgentCore:
             history_text = "\n".join(
                 f"{m.role.upper()}: {m.content}" for m in old_messages
             )
-            response = await self.client.messages.create(
-                model=FALLBACK_MODEL,
-                max_tokens=400,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": f"{CONTEXT_SUMMARISATION_PROMPT}\n\n{history_text}"
-                    }
-                ]
+            response = await self.client.aio.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=[
+                    types.Content(
+                        role="user",
+                        parts=[types.Part(text=f"{CONTEXT_SUMMARISATION_PROMPT}\n\n{history_text}")],
+                    )
+                ],
+                config=types.GenerateContentConfig(max_output_tokens=400),
             )
-            summary = response.content[0].text.strip()
+            summary = response.text.strip()
             from app.models.conversation import Message
             summary_msg = Message(
                 role=MessageRole.SYSTEM,

@@ -1,5 +1,5 @@
 """
-Escalation Engine — both rule-based triggers and LLM-based confidence scoring.
+Escalation Engine — rule-based triggers + Gemini-based sentiment scoring.
 Evaluates after every agent turn and flags conversations for human handoff.
 """
 
@@ -11,15 +11,18 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-import anthropic
+from google import genai
+from google.genai import types
 
 from app.agent.prompts import SENTIMENT_ANALYSIS_PROMPT
 from app.models.conversation import Conversation, ConversationStatus
 
 logger = logging.getLogger(__name__)
 
+GEMINI_MODEL = "gemini-2.0-flash"
+
 # ---------------------------------------------------------------------------
-# Escalation triggers (rule-based)
+# Escalation trigger patterns (rule-based)
 # ---------------------------------------------------------------------------
 
 LEGAL_KEYWORDS = [
@@ -42,17 +45,17 @@ HUMAN_REQUEST_PATTERNS = [
 ]
 
 MAX_TURNS_BEFORE_ESCALATION = 8
-HIGH_REFUND_THRESHOLD = 500.0   # USD
+HIGH_REFUND_THRESHOLD       = 500.0
 
 
 @dataclass
 class EscalationDecision:
-    should_escalate: bool
-    reason: Optional[str] = None
-    urgency: str = "normal"        # normal | high | critical
-    trigger_type: str = "none"     # rule | sentiment | llm | turn_limit
-    sentiment_score: Optional[float] = None
-    confidence: float = 1.0
+    should_escalate:  bool
+    reason:           Optional[str]  = None
+    urgency:          str            = "normal"    # normal | high | critical
+    trigger_type:     str            = "none"      # rule | sentiment | llm | turn_limit
+    sentiment_score:  Optional[float] = None
+    confidence:       float          = 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -60,21 +63,17 @@ class EscalationDecision:
 # ---------------------------------------------------------------------------
 
 class EscalationEngine:
-    def __init__(self, anthropic_client: Optional[anthropic.AsyncAnthropic] = None):
-        self.client = anthropic_client
-        self._legal_re = [re.compile(p, re.IGNORECASE) for p in LEGAL_KEYWORDS]
+    def __init__(self, gemini_client: Optional[genai.Client] = None):
+        self.client          = gemini_client
+        self._legal_re       = [re.compile(p, re.IGNORECASE) for p in LEGAL_KEYWORDS]
         self._frustration_re = [re.compile(p, re.IGNORECASE) for p in FRUSTRATION_KEYWORDS]
-        self._human_re = [re.compile(p, re.IGNORECASE) for p in HUMAN_REQUEST_PATTERNS]
+        self._human_re       = [re.compile(p, re.IGNORECASE) for p in HUMAN_REQUEST_PATTERNS]
 
     async def evaluate(
         self,
         conversation: Conversation,
         latest_user_message: str,
     ) -> EscalationDecision:
-        """
-        Run all escalation checks in order of priority.
-        Returns the first matching escalation reason.
-        """
         # 1. Already escalated — skip
         if conversation.status == ConversationStatus.ESCALATED:
             return EscalationDecision(should_escalate=False)
@@ -99,16 +98,14 @@ class EscalationEngine:
                     trigger_type="rule",
                 )
 
-        # 4. VIP / enterprise customer
-        if conversation.is_vip:
-            # VIP customers get escalated if issue isn't resolved within 3 turns
-            if conversation.turn_count >= 3:
-                return EscalationDecision(
-                    should_escalate=True,
-                    reason="VIP customer with unresolved issue after 3 turns",
-                    urgency="high",
-                    trigger_type="rule",
-                )
+        # 4. VIP / enterprise customer — escalate after 3 turns
+        if conversation.is_vip and conversation.turn_count >= 3:
+            return EscalationDecision(
+                should_escalate=True,
+                reason="VIP customer with unresolved issue after 3 turns",
+                urgency="high",
+                trigger_type="rule",
+            )
 
         # 5. Turn limit exceeded
         if conversation.turn_count >= MAX_TURNS_BEFORE_ESCALATION:
@@ -119,7 +116,7 @@ class EscalationEngine:
                 trigger_type="turn_limit",
             )
 
-        # 6. Sentiment analysis (LLM-based)
+        # 6. Sentiment analysis via Gemini Flash
         sentiment = await self._analyse_sentiment(latest_user_message)
         if sentiment and sentiment.get("score", 0) < -0.7:
             return EscalationDecision(
@@ -145,27 +142,28 @@ class EscalationEngine:
         return EscalationDecision(should_escalate=False)
 
     async def _analyse_sentiment(self, text: str) -> Optional[dict]:
-        """
-        Use Claude Haiku to score sentiment cheaply and quickly.
-        Returns dict with score, label, urgency, keywords.
-        """
+        """Use Gemini Flash to score sentiment (free tier)."""
         if not self.client:
             return None
         try:
-            response = await self.client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=256,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            f"{SENTIMENT_ANALYSIS_PROMPT}\n\n"
-                            f"Message: {text}"
-                        )
-                    }
-                ]
+            response = await self.client.aio.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=[
+                    types.Content(
+                        role="user",
+                        parts=[types.Part(text=f"{SENTIMENT_ANALYSIS_PROMPT}\n\nMessage: {text}")],
+                    )
+                ],
+                config=types.GenerateContentConfig(
+                    max_output_tokens=256,
+                    temperature=0.0,
+                ),
             )
-            raw = response.content[0].text.strip()
+            raw = response.text.strip()
+            # Strip markdown code fences if present
+            if raw.startswith("```"):
+                raw = re.sub(r"^```[a-z]*\n?", "", raw)
+                raw = re.sub(r"\n?```$", "", raw)
             return json.loads(raw)
         except Exception as exc:
             logger.warning("Sentiment analysis failed: %s", exc)

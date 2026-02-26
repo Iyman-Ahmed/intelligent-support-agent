@@ -1,5 +1,6 @@
 """
 HuggingFace Spaces — Gradio 5.x web interface.
+Powered by Google Gemini 2.0 Flash (free tier — 1,500 req/day).
 Compatible with Python 3.13.
 
 Run locally:  python app.py
@@ -12,19 +13,19 @@ import asyncio
 import os
 import sys
 import time
-import types
+import types as _types
 from typing import List
 
 # ---------------------------------------------------------------------------
 # Compatibility patches — MUST run before `import gradio`
 # ---------------------------------------------------------------------------
 def _patch_compat() -> None:
-    # 1. audioop removed in Python 3.13 — pydub needs it
+    # audioop removed in Python 3.13 — pydub needs it
     for mod_name in ("audioop", "pyaudioop"):
         if mod_name not in sys.modules:
-            sys.modules[mod_name] = types.ModuleType(mod_name)
+            sys.modules[mod_name] = _types.ModuleType(mod_name)
 
-    # 2. HfFolder removed in huggingface_hub >= 0.25 — gradio.oauth needs it
+    # HfFolder removed in huggingface_hub >= 0.25 — gradio.oauth needs it
     try:
         import huggingface_hub as _hfhub
         if not hasattr(_hfhub, "HfFolder"):
@@ -42,7 +43,7 @@ def _patch_compat() -> None:
 
 _patch_compat()
 
-import anthropic
+from google import genai
 import gradio as gr
 
 from app.agent.core import SupportAgentCore
@@ -61,24 +62,25 @@ from app.session_store import SessionStore
 
 _agent: SupportAgentCore | None = None
 _store: SessionStore | None = None
-_init_lock: asyncio.Lock | None = None   # created lazily (needs a running loop)
+_init_lock: asyncio.Lock | None = None
 
 
 async def _build_agent() -> tuple[SupportAgentCore, SessionStore]:
-    """Build and initialise all services."""
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    """Build and initialise all services using Gemini Flash (free tier)."""
+    api_key = os.getenv("GEMINI_API_KEY", "")
     if not api_key:
         raise ValueError(
-            "ANTHROPIC_API_KEY not set. "
-            "On HF Spaces: Settings → Variables and secrets → New secret."
+            "GEMINI_API_KEY not set.\n"
+            "• Get a free key at: https://aistudio.google.com/apikey\n"
+            "• On HF Spaces: Settings → Variables and secrets → New secret → GEMINI_API_KEY"
         )
 
-    client     = anthropic.AsyncAnthropic(api_key=api_key)
-    kb         = KnowledgeBaseService()
-    customer   = CustomerDBService()
-    tickets    = TicketService()
-    email      = EmailService()
-    store      = SessionStore()
+    client   = genai.Client(api_key=api_key)
+    kb       = KnowledgeBaseService()
+    customer = CustomerDBService()
+    tickets  = TicketService()
+    email    = EmailService()
+    store    = SessionStore()
 
     await asyncio.gather(
         kb.initialize(),
@@ -93,9 +95,9 @@ async def _build_agent() -> tuple[SupportAgentCore, SessionStore]:
         ticket_service=tickets,
         email_service=email,
     )
-    escalation = EscalationEngine(anthropic_client=client)
+    escalation = EscalationEngine(gemini_client=client)
     agent = SupportAgentCore(
-        anthropic_client=client,
+        gemini_client=client,
         tool_dispatcher=dispatcher,
         escalation_engine=escalation,
         session_store=store,
@@ -104,23 +106,21 @@ async def _build_agent() -> tuple[SupportAgentCore, SessionStore]:
 
 
 async def _ensure_agent() -> None:
-    """Initialise the agent on first call, inside the running event loop."""
+    """Initialise the agent on first call, inside Gradio's running event loop."""
     global _agent, _store, _init_lock
 
-    # Fast path — already initialised
     if _agent is not None:
         return
 
-    # Create lock lazily inside the running loop
     if _init_lock is None:
         _init_lock = asyncio.Lock()
 
     async with _init_lock:
-        if _agent is not None:   # double-checked locking
+        if _agent is not None:
             return
         try:
             _agent, _store = await _build_agent()
-            print("✅ Agent initialised successfully")
+            print("✅ Gemini agent initialised successfully")
         except Exception as exc:
             print(f"⚠️  Agent init failed: {exc}")
             raise
@@ -146,7 +146,7 @@ DEMO_CUSTOMERS = {
 }
 
 # ---------------------------------------------------------------------------
-# Chat handler — async def so Gradio 5 / AnyIO runs it in the existing loop
+# Chat handler
 # ---------------------------------------------------------------------------
 
 async def chat(
@@ -163,7 +163,11 @@ async def chat(
     except Exception as exc:
         history = history + [
             {"role": "user", "content": user_message},
-            {"role": "assistant", "content": f"⚠️ Agent failed to initialise: {exc}\n\nMake sure ANTHROPIC_API_KEY is set."},
+            {"role": "assistant", "content": (
+                f"⚠️ **Agent failed to initialise:** {exc}\n\n"
+                "Make sure **GEMINI_API_KEY** is set in your Space secrets.\n"
+                "Get a free key at: https://aistudio.google.com/apikey"
+            )},
         ]
         return history, session_state, _status_html(session_state), _meta_html(session_state)
 
@@ -194,7 +198,6 @@ async def chat(
 
     elapsed = round((time.monotonic() - start) * 1000)
 
-    # Collect last tool calls
     last_tools = []
     for m in reversed(conversation.messages):
         if m.role == "assistant" and m.tool_calls:
@@ -226,7 +229,7 @@ async def inject_prompt(prompt: str, history, session_state, selected_customer):
 
 
 # ---------------------------------------------------------------------------
-# Status / metadata panels  —  neutral colours that suit any theme
+# Status / metadata panels
 # ---------------------------------------------------------------------------
 
 STATUS_META = {
@@ -237,7 +240,6 @@ STATUS_META = {
     ConversationStatus.PENDING:   ("#d97706", "🟡 Pending"),
 }
 
-# Neutral panel: works on both light and dark Gradio themes
 _PANEL = (
     "border:1px solid #e5e7eb;border-radius:8px;"
     "padding:12px;font-family:monospace;font-size:13px;line-height:1.6"
@@ -293,13 +295,12 @@ with gr.Blocks(
 
     gr.Markdown("""
     # 🤖 Intelligent Customer Support Agent
-    **Powered by Claude Haiku** &nbsp;|&nbsp; Multi-turn memory &nbsp;|&nbsp;
+    **Powered by Gemini 2.0 Flash (free tier)** &nbsp;|&nbsp; Multi-turn memory &nbsp;|&nbsp;
     Tool use &nbsp;|&nbsp; Auto-escalation &nbsp;|&nbsp; Ticket creation
     """)
 
     with gr.Row(equal_height=True):
 
-        # ── Chat panel ──────────────────────────────────────────────────
         with gr.Column(scale=4):
             chatbot = gr.Chatbot(
                 elem_id="chatbot",
@@ -317,7 +318,6 @@ with gr.Blocks(
                 )
                 send_btn = gr.Button("Send ➤", variant="primary", scale=1, min_width=80)
 
-        # ── Sidebar ──────────────────────────────────────────────────────
         with gr.Column(scale=2, min_width=240):
 
             gr.Markdown("#### 👤 Demo Customer")
@@ -347,15 +347,18 @@ with gr.Blocks(
         gr.Markdown("""
         **On every message:**
         1. Escalation pre-check — legal keywords, human request, VIP flag
-        2. Claude Haiku processes message + full history with tools
-        3. Tool loop — Claude calls tools, reads results, continues until done
-        4. Post-check — sentiment scored by Claude Haiku
+        2. Gemini 2.0 Flash processes message + full history with tools
+        3. Tool loop — Gemini calls tools, reads results, continues until done
+        4. Post-check — sentiment scored by Gemini Flash
 
         **Tools:** `search_knowledge_base` · `lookup_customer` · `create_ticket` ·
         `check_order_status` · `escalate_to_human` · `send_email_reply`
 
         **Auto-escalation:** legal words · "speak to human/manager" ·
         VIP customer · refund > $500 · sentiment < -0.7 · 8+ turns unresolved
+
+        **Cost:** 100% free — uses Gemini 2.0 Flash free tier (1,500 requests/day).
+        Get your free API key at [aistudio.google.com](https://aistudio.google.com/apikey).
         """)
 
     # ── Event wiring ────────────────────────────────────────────────────
@@ -380,8 +383,9 @@ with gr.Blocks(
             outputs=_outputs,
         )
 
-    # ── Warm-up: initialise the agent inside Gradio's AnyIO event loop ──
+    # Warm-up: init agent inside Gradio's AnyIO event loop
     demo.load(fn=_ensure_agent, inputs=None, outputs=None)
+
 
 # ---------------------------------------------------------------------------
 # Launch

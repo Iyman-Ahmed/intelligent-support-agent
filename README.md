@@ -13,7 +13,10 @@ short_description: AI support agent with tool use and escalation
 
 # Intelligent Customer Support Agent
 
-A production-ready AI customer support agent built with Anthropic Claude, FastAPI, and a full service stack. Handles multi-turn conversations via chat and email, calls real APIs via tool use, and automatically escalates complex issues to human agents.
+A production-ready AI customer support agent built with **Google Gemini 2.0 Flash (free tier)**, FastAPI, and a full service stack. Handles multi-turn conversations via chat and email, calls real APIs via tool use, and automatically escalates complex issues to human agents.
+
+> **100% free to run** — uses Gemini 2.0 Flash free tier (1,500 requests/day).
+> Get your free API key at [aistudio.google.com](https://aistudio.google.com/apikey).
 
 ---
 
@@ -25,7 +28,7 @@ pip install -r requirements.txt
 
 # 2. Configure environment
 cp .env.example .env
-# → Add your ANTHROPIC_API_KEY
+# → Add your GEMINI_API_KEY (free at aistudio.google.com)
 
 # 3. Run locally
 python app/main.py
