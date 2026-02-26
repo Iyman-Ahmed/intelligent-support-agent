@@ -1,6 +1,3 @@
-# Python 3.13 pre-built wheels (must come before gradio pulls it in)
-pillow>=11.0.0
-
 # LLM — Google Gemini 2.0 Flash (free tier: 1,500 req/day)
 google-genai>=1.0.0
 
