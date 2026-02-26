@@ -1,14 +1,14 @@
 ---
 title: Intelligent Customer Support Agent
 emoji: 🤖
-colorFrom: violet
+colorFrom: purple
 colorTo: blue
 sdk: gradio
 sdk_version: "4.44.0"
 app_file: app.py
 pinned: false
 license: mit
-short_description: AI customer support agent with tool use, escalation & tickets
+short_description: AI support agent with tool use and escalation
 ---
 
 # Intelligent Customer Support Agent
