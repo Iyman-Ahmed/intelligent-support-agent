@@ -1,5 +1,6 @@
-# Web UI — Gradio 5+ required (Python 3.13 compatible)
+# Web UI — Gradio + Python 3.13 audio fix
 gradio>=5.0.0
+pyaudioop
 
 # Core
 fastapi==0.115.0
