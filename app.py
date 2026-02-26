@@ -1,6 +1,6 @@
 """
 HuggingFace Spaces — Gradio 5.x web interface.
-Compatible with Python 3.13 (no audioop/pydub dependency).
+Compatible with Python 3.13.
 
 Run locally:  python app.py
 HF Spaces:    push to your Space repo — runs automatically
@@ -17,36 +17,25 @@ from typing import List
 
 # ---------------------------------------------------------------------------
 # Compatibility patches — MUST run before `import gradio`
-#
-# 1. audioop: removed in Python 3.13; pydub (gradio dep) needs it.
-#    We use no audio features so an empty mock is safe.
-#
-# 2. HfFolder: removed in huggingface_hub >= 0.25; gradio.oauth needs it.
-#    We stub it out so oauth.py can import without crashing.
 # ---------------------------------------------------------------------------
 def _patch_compat() -> None:
-    # -- audioop / pyaudioop --------------------------------------------------
+    # 1. audioop removed in Python 3.13 — pydub needs it
     for mod_name in ("audioop", "pyaudioop"):
         if mod_name not in sys.modules:
             sys.modules[mod_name] = types.ModuleType(mod_name)
 
-    # -- HfFolder -------------------------------------------------------------
+    # 2. HfFolder removed in huggingface_hub >= 0.25 — gradio.oauth needs it
     try:
         import huggingface_hub as _hfhub
         if not hasattr(_hfhub, "HfFolder"):
             class _HfFolderStub:
                 @staticmethod
                 def get_token():
-                    return (
-                        os.getenv("HF_TOKEN")
-                        or os.getenv("HUGGING_FACE_HUB_TOKEN")
-                    )
+                    return os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
                 @staticmethod
-                def save_token(token: str) -> None:
-                    pass
+                def save_token(token: str) -> None: pass
                 @staticmethod
-                def delete_token() -> None:
-                    pass
+                def delete_token() -> None: pass
             _hfhub.HfFolder = _HfFolderStub
     except ImportError:
         pass
@@ -67,14 +56,15 @@ from app.services.ticket_service import TicketService
 from app.session_store import SessionStore
 
 # ---------------------------------------------------------------------------
-# Global agent (initialised once)
+# Global agent — initialised once at startup using asyncio.run()
 # ---------------------------------------------------------------------------
 
 _agent: SupportAgentCore | None = None
 _store: SessionStore | None = None
 
 
-def _init_agent() -> tuple[SupportAgentCore, SessionStore]:
+async def _build_agent() -> tuple[SupportAgentCore, SessionStore]:
+    """Build and initialise all services. Runs once at startup."""
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise ValueError(
@@ -89,6 +79,13 @@ def _init_agent() -> tuple[SupportAgentCore, SessionStore]:
     email      = EmailService()
     store      = SessionStore()
 
+    await asyncio.gather(
+        kb.initialize(),
+        customer.initialize(),
+        tickets.initialize(),
+        store.initialize(),
+    )
+
     dispatcher = ToolDispatcher(
         knowledge_base_service=kb,
         customer_service=customer,
@@ -102,23 +99,21 @@ def _init_agent() -> tuple[SupportAgentCore, SessionStore]:
         escalation_engine=escalation,
         session_store=store,
     )
-
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(asyncio.gather(
-        kb.initialize(),
-        customer.initialize(),
-        tickets.initialize(),
-        store.initialize(),
-    ))
-    loop.close()
     return agent, store
 
 
-def get_agent() -> tuple[SupportAgentCore, SessionStore]:
+def _startup() -> None:
+    """Run async init at module load time — before Gradio's event loop starts."""
     global _agent, _store
-    if _agent is None:
-        _agent, _store = _init_agent()
-    return _agent, _store
+    try:
+        _agent, _store = asyncio.run(_build_agent())
+        print("✅ Agent initialised successfully")
+    except Exception as exc:
+        print(f"⚠️  Agent init failed: {exc}")
+        print("    Make sure ANTHROPIC_API_KEY is set.")
+
+
+_startup()
 
 
 # ---------------------------------------------------------------------------
@@ -141,28 +136,31 @@ DEMO_CUSTOMERS = {
 }
 
 # ---------------------------------------------------------------------------
-# Chat function  —  Gradio 5 uses List[dict] for history
+# Chat handler — async def so Gradio 5 / AnyIO runs it in the existing loop
 # ---------------------------------------------------------------------------
 
-def chat(
+async def chat(
     user_message: str,
-    history: List[dict],          # [{"role": "user"/"assistant", "content": "..."}]
+    history: List[dict],
     session_state: dict,
     selected_customer: str,
 ) -> tuple:
     if not user_message.strip():
         return history, session_state, _status_html(session_state), _meta_html(session_state)
 
-    agent, store = get_agent()
+    if _agent is None or _store is None:
+        history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": "⚠️ Agent not initialised. Check ANTHROPIC_API_KEY."},
+        ]
+        return history, session_state, _status_html(session_state), _meta_html(session_state)
 
     # Load or create conversation
     session_id   = session_state.get("session_id")
     conversation = None
 
     if session_id:
-        loop         = asyncio.new_event_loop()
-        conversation = loop.run_until_complete(store.load(session_id))
-        loop.close()
+        conversation = await _store.load(session_id)
 
     if not conversation:
         email_val, cid = DEMO_CUSTOMERS.get(selected_customer, (None, None))
@@ -177,22 +175,14 @@ def chat(
     # Run agent
     start = time.monotonic()
     try:
-        loop         = asyncio.new_event_loop()
-        reply, conversation = loop.run_until_complete(
-            agent.process_message(conversation, user_message)
-        )
-        loop.run_until_complete(store.save(conversation))
-        loop.close()
+        reply, conversation = await _agent.process_message(conversation, user_message)
+        await _store.save(conversation)
     except Exception as exc:
         reply = f"⚠️ Agent error: {exc}"
-        try:
-            loop.close()
-        except Exception:
-            pass
 
     elapsed = round((time.monotonic() - start) * 1000)
 
-    # Collect tool calls from last assistant message
+    # Collect last tool calls
     last_tools = []
     for m in reversed(conversation.messages):
         if m.role == "assistant" and m.tool_calls:
@@ -208,7 +198,6 @@ def chat(
         "last_tools": last_tools,
     })
 
-    # Gradio 5: history is list of dicts
     history = history + [
         {"role": "user",      "content": user_message},
         {"role": "assistant", "content": reply},
@@ -216,41 +205,42 @@ def chat(
     return history, session_state, _status_html(session_state), _meta_html(session_state)
 
 
-def reset_chat(selected_customer: str):
+async def reset_chat(selected_customer: str):
     return [], {}, _status_html({}), _meta_html({})
 
 
-def inject_prompt(prompt: str, history, session_state, selected_customer):
-    return chat(prompt, history, session_state, selected_customer)
+async def inject_prompt(prompt: str, history, session_state, selected_customer):
+    return await chat(prompt, history, session_state, selected_customer)
 
 
 # ---------------------------------------------------------------------------
-# Status / metadata panels
+# Status / metadata panels  —  neutral colours that suit any theme
 # ---------------------------------------------------------------------------
 
 STATUS_META = {
-    ConversationStatus.OPEN:      ("#22c55e", "🟢 Open"),
-    ConversationStatus.ESCALATED: ("#ef4444", "🔴 Escalated to Human"),
-    ConversationStatus.RESOLVED:  ("#3b82f6", "🔵 Resolved"),
+    ConversationStatus.OPEN:      ("#16a34a", "🟢 Open"),
+    ConversationStatus.ESCALATED: ("#dc2626", "🔴 Escalated to Human"),
+    ConversationStatus.RESOLVED:  ("#2563eb", "🔵 Resolved"),
     ConversationStatus.CLOSED:    ("#6b7280", "⚫ Closed"),
-    ConversationStatus.PENDING:   ("#f59e0b", "🟡 Pending"),
+    ConversationStatus.PENDING:   ("#d97706", "🟡 Pending"),
 }
 
+# Neutral panel: works on both light and dark Gradio themes
 _PANEL = (
-    "background:#1e1e2e;border-radius:8px;color:#cdd6f4;"
-    "padding:12px;font-family:monospace;font-size:13px"
+    "border:1px solid #e5e7eb;border-radius:8px;"
+    "padding:12px;font-family:monospace;font-size:13px;line-height:1.6"
 )
 
 
 def _status_html(state: dict) -> str:
-    status      = state.get("status")
+    status       = state.get("status")
     color, label = STATUS_META.get(status, ("#6b7280", "⚪ No session yet"))
-    turn        = state.get("turn_count", 0)
-    sid         = state.get("session_id", "—")
-    sid_short   = (sid[:8] + "…") if sid and sid != "—" else "—"
+    turn         = state.get("turn_count", 0)
+    sid          = state.get("session_id", "—")
+    sid_short    = (sid[:8] + "…") if sid and sid != "—" else "—"
     return (
         f'<div style="{_PANEL}">'
-        f'<div style="color:{color};font-weight:bold;margin-bottom:6px">{label}</div>'
+        f'<div style="color:{color};font-weight:bold;margin-bottom:4px">{label}</div>'
         f'<div>Turns: <b>{turn}</b></div>'
         f'<div>Session: <b>{sid_short}</b></div>'
         f'</div>'
@@ -265,10 +255,9 @@ def _meta_html(state: dict) -> str:
     elapsed_str = f"{elapsed} ms" if isinstance(elapsed, int) else "—"
     return (
         f'<div style="{_PANEL}">'
-        f'<div>Response time: <b>{elapsed_str}</b></div>'
+        f'<div>Response: <b>{elapsed_str}</b></div>'
         f'<div style="margin-top:4px">Ticket: <b>{ticket}</b></div>'
-        f'<div style="margin-top:6px">Tools used:</div>'
-        f'<div style="margin-top:2px">{tools_str}</div>'
+        f'<div style="margin-top:6px">Tools: {tools_str}</div>'
         f'</div>'
     )
 
@@ -303,7 +292,7 @@ with gr.Blocks(
             chatbot = gr.Chatbot(
                 elem_id="chatbot",
                 label="Chat with Aria (AI Support Agent)",
-                type="messages",          # Gradio 5 format
+                type="messages",
                 show_copy_button=True,
             )
             with gr.Row():
@@ -319,15 +308,15 @@ with gr.Blocks(
         # ── Sidebar ──────────────────────────────────────────────────────
         with gr.Column(scale=2, min_width=240):
 
-            gr.Markdown("#### 👤 Demo Customer Profile")
+            gr.Markdown("#### 👤 Demo Customer")
             customer_dd = gr.Dropdown(
                 choices=list(DEMO_CUSTOMERS.keys()),
                 value="None (anonymous)",
                 label="",
-                info="Agent will auto-look up this customer when you give their email",
+                info="Agent looks up this customer when you give their email",
             )
 
-            gr.Markdown("#### ⚡ Try These Prompts")
+            gr.Markdown("#### ⚡ Quick Prompts")
             prompt_btns = []
             for p in DEMO_PROMPTS:
                 label = p[:44] + ("…" if len(p) > 44 else "")
@@ -342,7 +331,6 @@ with gr.Blocks(
 
             reset_btn = gr.Button("🔄 New Conversation", variant="secondary", size="sm")
 
-    # ── How it works ────────────────────────────────────────────────────
     with gr.Accordion("ℹ️ How the agent works", open=False):
         gr.Markdown("""
         **On every message:**
@@ -351,10 +339,10 @@ with gr.Blocks(
         3. Tool loop — Claude calls tools, reads results, continues until done
         4. Post-check — sentiment scored by Claude Haiku
 
-        **Tools available:** `search_knowledge_base` · `lookup_customer` ·
-        `create_ticket` · `check_order_status` · `escalate_to_human` · `send_email_reply`
+        **Tools:** `search_knowledge_base` · `lookup_customer` · `create_ticket` ·
+        `check_order_status` · `escalate_to_human` · `send_email_reply`
 
-        **Auto-escalation triggers:** legal words · "speak to human/manager" ·
+        **Auto-escalation:** legal words · "speak to human/manager" ·
         VIP customer · refund > $500 · sentiment < -0.7 · 8+ turns unresolved
         """)
 
@@ -375,7 +363,7 @@ with gr.Blocks(
             fn=inject_prompt,
             inputs=[
                 gr.Textbox(value=prompt_text, visible=False),
-                chatbot, session_state, customer_dd
+                chatbot, session_state, customer_dd,
             ],
             outputs=_outputs,
         )
