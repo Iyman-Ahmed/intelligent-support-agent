@@ -10,6 +10,7 @@ HF Spaces:    push to your Space repo — runs automatically
 from __future__ import annotations
 
 import asyncio
+import functools
 import os
 import sys
 import time
@@ -374,12 +375,11 @@ with gr.Blocks(
     reset_btn.click(fn=reset_chat, inputs=[customer_dd], outputs=_outputs)
 
     for btn, prompt_text in prompt_btns:
+        # functools.partial binds prompt_text so no hidden Textbox needed —
+        # avoids the gradio_client schema TypeError on bool values
         btn.click(
-            fn=inject_prompt,
-            inputs=[
-                gr.Textbox(value=prompt_text, visible=False),
-                chatbot, session_state, customer_dd,
-            ],
+            fn=functools.partial(inject_prompt, prompt_text),
+            inputs=[chatbot, session_state, customer_dd],
             outputs=_outputs,
         )
 
