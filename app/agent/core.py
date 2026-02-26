@@ -42,8 +42,9 @@ logger = logging.getLogger(__name__)
 # Configuration
 # ---------------------------------------------------------------------------
 
-GEMINI_MODEL         = "gemini-2.0-flash"       # Free tier: 1,500 req/day, 1M TPM
-GEMINI_MODEL_LITE    = "gemini-2.0-flash-lite"  # Fallback: higher free quota
+GEMINI_MODEL         = "gemini-2.0-flash"       # Free tier: 1,500 req/day
+GEMINI_MODEL_LITE    = "gemini-2.0-flash-lite"  # Fallback 1: higher free quota
+GEMINI_MODEL_LEGACY  = "gemini-1.5-flash"       # Fallback 2: separate quota pool
 MAX_TOKENS      = 1024
 MAX_TOOL_ITERATIONS  = 10
 CONTEXT_WINDOW_TURNS = 20
@@ -252,8 +253,8 @@ class SupportAgentCore:
     async def _call_gemini(self, contents: list):
         import re as _re
 
-        # Try primary model first, fall back to lite model on quota errors
-        models_to_try = [GEMINI_MODEL, GEMINI_MODEL_LITE]
+        # Try models in order — each has its own separate quota pool
+        models_to_try = [GEMINI_MODEL, GEMINI_MODEL_LITE, GEMINI_MODEL_LEGACY]
 
         for model in models_to_try:
             for attempt in range(3):

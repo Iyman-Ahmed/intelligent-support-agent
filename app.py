@@ -284,6 +284,8 @@ def _meta_html(state: dict) -> str:
 CSS = """
 #chatbot { height: 500px; }
 footer { display: none !important; }
+.api-docs { display: none !important; }
+.built-with { display: none !important; }
 """
 
 with gr.Blocks(
