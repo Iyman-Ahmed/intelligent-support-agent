@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import hashlib
 import os
 import sys
 import time
@@ -67,6 +68,49 @@ from app.session_store import SessionStore
 _agent: SupportAgentCore | None = None
 _store: SessionStore | None = None
 _init_lock: asyncio.Lock | None = None
+
+# ---------------------------------------------------------------------------
+# Response cache — avoids repeat Gemini calls for identical FAQ questions.
+# Only caches anonymous-user, generic questions (no personal data).
+# TTL: 1 hour.  Max entries: 200 (auto-evicted oldest first).
+# ---------------------------------------------------------------------------
+
+_RESPONSE_CACHE: dict[str, dict] = {}   # key → {"reply": str, "expires": float}
+_CACHE_TTL = 3600              # seconds
+_CACHE_MAX = 200
+
+
+def _cache_key(message: str) -> str:
+    return hashlib.md5(message.lower().strip().encode()).hexdigest()
+
+
+def _get_cached(message: str) -> str | None:
+    key = _cache_key(message)
+    entry = _RESPONSE_CACHE.get(key)
+    if entry and time.time() < entry["expires"]:
+        return entry["reply"]
+    if entry:
+        _RESPONSE_CACHE.pop(key, None)   # expired
+    return None
+
+
+def _set_cached(message: str, reply: str) -> None:
+    if len(_RESPONSE_CACHE) >= _CACHE_MAX:
+        # evict the oldest entry
+        oldest = min(_RESPONSE_CACHE, key=lambda k: _RESPONSE_CACHE[k]["expires"])
+        _RESPONSE_CACHE.pop(oldest, None)
+    _RESPONSE_CACHE[_cache_key(message)] = {"reply": reply, "expires": time.time() + _CACHE_TTL}
+
+
+def _is_cacheable(message: str, selected_customer: str) -> bool:
+    """Only cache anonymous, short, generic queries — never personalised ones."""
+    if "None (anonymous)" not in selected_customer:
+        return False
+    msg = message.lower()
+    # Skip if message contains personal data indicators
+    if "@" in msg or any(x in msg for x in ("order", "my account", "my subscription", "i can't", "i cannot", "i'm unable")):
+        return False
+    return len(message) < 120
 
 
 async def _build_agent() -> tuple[SupportAgentCore, SessionStore]:
@@ -173,6 +217,19 @@ async def chat(
     if not user_message.strip():
         return history, session_state, _status_html(session_state), _meta_html(session_state)
 
+    # ── Cache check ────────────────────────────────────────────────────────
+    # For anonymous, generic FAQ questions return the cached reply immediately
+    # without touching Gemini — preserves free-tier quota.
+    if _is_cacheable(user_message, selected_customer):
+        cached_reply = _get_cached(user_message)
+        if cached_reply:
+            print(f"[CHAT] Cache hit for: {user_message[:60]}")
+            history = history + [
+                {"role": "user",      "content": user_message},
+                {"role": "assistant", "content": cached_reply},
+            ]
+            return history, session_state, _status_html(session_state), _meta_html(session_state)
+
     reply = "⚠️ Something went wrong — no response generated."  # safety default
 
     try:
@@ -212,9 +269,13 @@ async def chat(
     try:
         print(f"[CHAT] Calling process_message...")
         reply, conversation = await _agent.process_message(conversation, user_message)
-        print(f"[CHAT] Got reply: {reply[:120] if reply else '(empty)'}")
+        snippet = (reply or "")[:120]
+        print(f"[CHAT] Got reply: {snippet if snippet else '(empty)'}")
         if _store:
             await _store.save(conversation)
+        # Save to cache for identical future queries (anonymous + generic only)
+        if reply and _is_cacheable(user_message, selected_customer):
+            _set_cached(user_message, reply)
     except Exception as exc:
         print(f"[CHAT] Agent error: {exc}")
         reply = f"⚠️ Agent error: {exc}"
