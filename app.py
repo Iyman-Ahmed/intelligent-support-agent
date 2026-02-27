@@ -44,7 +44,10 @@ def _patch_compat() -> None:
 
 _patch_compat()
 
-from google import genai
+# NOTE: `from google import genai` is intentionally NOT imported here at module
+# level.  Importing it here can trigger SDK initialisation side-effects before
+# any user interaction.  It is imported lazily inside _build_agent() instead,
+# so the Google GenAI SDK is loaded only when the first user message arrives.
 import gradio as gr
 
 from app.agent.core import SupportAgentCore
@@ -67,7 +70,14 @@ _init_lock: asyncio.Lock | None = None
 
 
 async def _build_agent() -> tuple[SupportAgentCore, SessionStore]:
-    """Build and initialise all services using Gemini Flash (free tier)."""
+    """Build and initialise all services using Gemini Flash (free tier).
+
+    Imported lazily here — the Google GenAI SDK is NOT loaded at module level,
+    so no SDK initialisation (or any network call) happens until a user sends
+    their first message.
+    """
+    from google import genai  # lazy import — keeps startup free of API calls
+
     api_key = os.getenv("GEMINI_API_KEY", "")
     if not api_key:
         raise ValueError(
@@ -76,6 +86,7 @@ async def _build_agent() -> tuple[SupportAgentCore, SessionStore]:
             "• On HF Spaces: Settings → Variables and secrets → New secret → GEMINI_API_KEY"
         )
 
+    print("⚙️  First user message received — initialising Gemini agent (no prior API calls were made).")
     client   = genai.Client(api_key=api_key)
     kb       = KnowledgeBaseService()
     customer = CustomerDBService()
