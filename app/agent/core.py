@@ -259,60 +259,54 @@ class SupportAgentCore:
     # ------------------------------------------------------------------
 
     async def _call_gemini(self, contents: list):
+        """Try each model ONCE — fail fast for web UI responsiveness."""
         import re as _re
 
-        # Try models in order — each has its own separate quota pool
         models_to_try = [GEMINI_MODEL, GEMINI_MODEL_LITE, GEMINI_MODEL_LEGACY]
+        last_err = ""
 
         for model in models_to_try:
-            for attempt in range(3):
-                try:
-                    response = await self.client.aio.models.generate_content(
-                        model=model,
-                        contents=contents,
-                        config=types.GenerateContentConfig(
-                            system_instruction=SUPPORT_AGENT_SYSTEM_PROMPT,
-                            tools=GEMINI_TOOLS,
-                            max_output_tokens=MAX_TOKENS,
-                            temperature=0.3,
-                        ),
-                    )
-                    return response
+            try:
+                logger.info("Calling Gemini model: %s", model)
+                response = await self.client.aio.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=SUPPORT_AGENT_SYSTEM_PROMPT,
+                        tools=GEMINI_TOOLS,
+                        max_output_tokens=MAX_TOKENS,
+                        temperature=0.3,
+                    ),
+                )
+                logger.info("Gemini %s responded OK", model)
+                return response
 
-                except Exception as exc:
-                    err_str = str(exc)
+            except Exception as exc:
+                last_err = str(exc)
+                logger.warning("Gemini %s failed: %s", model, last_err[:200])
 
-                    # 401 / invalid key — fail immediately, no point retrying
-                    if "400" in err_str and "API_KEY_INVALID" in err_str:
-                        raise RuntimeError(
-                            "❌ Invalid Gemini API key.\n"
-                            "Go to https://aistudio.google.com/apikey, create a new key, "
-                            "and update GEMINI_API_KEY in your HF Space secrets."
-                        ) from exc
+                # Invalid key — fail immediately
+                if "API_KEY_INVALID" in last_err:
+                    raise RuntimeError(
+                        "❌ Invalid Gemini API key. "
+                        "Go to https://aistudio.google.com/apikey → create a new key → "
+                        "update GEMINI_API_KEY in your HF Space secrets."
+                    ) from exc
 
-                    # 429 rate limit — respect retry-after, then try next model
-                    if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
-                        m = _re.search(r"retry in ([\d.]+)s", err_str)
-                        wait = float(m.group(1)) + 1.0 if m else (5 * (attempt + 1))
-                        logger.warning(
-                            "Rate limited on %s (attempt %d), waiting %.1fs",
-                            model, attempt + 1, wait,
-                        )
-                        await asyncio.sleep(min(wait, 30))  # cap at 30s
-                        if attempt == 2:
-                            logger.warning("Switching from %s to fallback model", model)
-                            break
-                        continue
+                # Rate limit — wait briefly then try next model
+                if "429" in last_err or "RESOURCE_EXHAUSTED" in last_err:
+                    m = _re.search(r"retry in ([\d.]+)s", last_err)
+                    wait = min(float(m.group(1)), 5) if m else 3
+                    await asyncio.sleep(wait)
+                    continue
 
-                    # Other errors — retry with backoff
-                    if attempt == 2:
-                        logger.error("Gemini error on %s: %s", model, exc)
-                        break  # try next model
-                    await asyncio.sleep(2 ** attempt)
+                # Other error — try next model immediately
+                continue
 
         raise RuntimeError(
-            "⚠️ Gemini API is temporarily unavailable or rate limited. "
-            "Please wait a moment and try again."
+            "⚠️ Gemini API rate limited on all models. "
+            "The free tier allows 15 requests/minute. "
+            "Please wait ~30 seconds and try again."
         )
 
     # ------------------------------------------------------------------
