@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
@@ -259,54 +260,97 @@ class SupportAgentCore:
     # ------------------------------------------------------------------
 
     async def _call_gemini(self, contents: list):
-        """Try each model ONCE — fail fast for web UI responsiveness."""
+        """Call Gemini with model fallback and a single quota-reset retry.
+
+        Strategy:
+        1. Try flash → flash-lite → flash-legacy with NO wait between them.
+           Each model has its own RPM quota pool, so a rate-limited flash
+           can still succeed on flash-lite (30 RPM vs 15 RPM).
+        2. If ALL three models are rate-limited, wait for the API-requested
+           retry-after period (capped at 30 s) and make one final attempt
+           on flash-lite (highest free-tier RPM).
+        3. Fail immediately on invalid key or daily quota exhaustion.
+        """
         import re as _re
 
+        _config = types.GenerateContentConfig(
+            system_instruction=SUPPORT_AGENT_SYSTEM_PROMPT,
+            tools=GEMINI_TOOLS,
+            max_output_tokens=MAX_TOKENS,
+            temperature=0.3,
+        )
+
         models_to_try = [GEMINI_MODEL, GEMINI_MODEL_LITE, GEMINI_MODEL_LEGACY]
-        last_err = ""
+        rate_limit_wait = 0.0   # seconds to wait suggested by the API
+        all_rate_limited = True
 
         for model in models_to_try:
             try:
                 logger.info("Calling Gemini model: %s", model)
                 response = await self.client.aio.models.generate_content(
-                    model=model,
-                    contents=contents,
-                    config=types.GenerateContentConfig(
-                        system_instruction=SUPPORT_AGENT_SYSTEM_PROMPT,
-                        tools=GEMINI_TOOLS,
-                        max_output_tokens=MAX_TOKENS,
-                        temperature=0.3,
-                    ),
+                    model=model, contents=contents, config=_config,
                 )
                 logger.info("Gemini %s responded OK", model)
                 return response
 
             except Exception as exc:
-                last_err = str(exc)
-                logger.warning("Gemini %s failed: %s", model, last_err[:200])
+                err = str(exc)
+                logger.warning("Gemini %s failed: %s", model, err[:200])
 
-                # Invalid key — fail immediately
-                if "API_KEY_INVALID" in last_err:
+                # Invalid API key — no point retrying any model
+                if "API_KEY_INVALID" in err or "API_KEY_INVALID" in err.upper():
                     raise RuntimeError(
                         "❌ Invalid Gemini API key. "
                         "Go to https://aistudio.google.com/apikey → create a new key → "
                         "update GEMINI_API_KEY in your HF Space secrets."
                     ) from exc
 
-                # Rate limit — wait briefly then try next model
-                if "429" in last_err or "RESOURCE_EXHAUSTED" in last_err:
-                    m = _re.search(r"retry in ([\d.]+)s", last_err)
-                    wait = min(float(m.group(1)), 5) if m else 3
-                    await asyncio.sleep(wait)
-                    continue
+                if "429" in err or "RESOURCE_EXHAUSTED" in err:
+                    # Daily quota exhausted — retrying won't help
+                    if "per_day" in err.lower() or "perday" in err.lower() or "daily" in err.lower():
+                        raise RuntimeError(
+                            "⚠️ Daily Gemini API quota exhausted (1,500 req/day on the free tier). "
+                            "Your quota resets at midnight Pacific Time. "
+                            "To avoid this, reduce usage or upgrade at aistudio.google.com."
+                        ) from exc
 
-                # Other error — try next model immediately
+                    # Per-minute rate limit — record suggested wait, try next model immediately
+                    m = _re.search(r"retry[_ ](?:after[_ ])?(\d+(?:\.\d+)?)\s*s", err, _re.IGNORECASE)
+                    if m:
+                        rate_limit_wait = max(rate_limit_wait, float(m.group(1)))
+                    else:
+                        rate_limit_wait = max(rate_limit_wait, 30.0)
+                    continue  # next model — no sleep here
+
+                # Non-rate-limit error (e.g. safety filter, server error)
+                all_rate_limited = False
                 continue
 
+        # ── All models failed ──────────────────────────────────────────────
+        if all_rate_limited:
+            wait = min(float(rate_limit_wait) + 2.0, 30.0)
+            logger.warning(
+                "All models rate-limited. Waiting %.0fs then retrying %s.",
+                wait, GEMINI_MODEL_LITE,
+            )
+            await asyncio.sleep(wait)
+            try:
+                response = await self.client.aio.models.generate_content(
+                    model=GEMINI_MODEL_LITE, contents=contents, config=_config,
+                )
+                logger.info("Gemini %s responded OK after quota-reset wait", GEMINI_MODEL_LITE)
+                return response
+            except Exception as exc:
+                err = str(exc)
+                if "429" in err or "RESOURCE_EXHAUSTED" in err:
+                    raise RuntimeError(
+                        "⚠️ Still rate-limited after waiting. "
+                        "The free tier allows 15 req/min (flash) or 30 req/min (flash-lite). "
+                        "Please wait ~60 seconds and send your message again."
+                    ) from exc
+
         raise RuntimeError(
-            "⚠️ Gemini API rate limited on all models. "
-            "The free tier allows 15 requests/minute. "
-            "Please wait ~30 seconds and try again."
+            "⚠️ Gemini API unavailable on all models. Please try again in a moment."
         )
 
     # ------------------------------------------------------------------
