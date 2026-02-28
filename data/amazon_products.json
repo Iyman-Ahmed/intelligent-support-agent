@@ -1,0 +1,626 @@
+[
+  {
+    "asin": "B09XS7JWHH",
+    "title": "Sony WH-1000XM5 Wireless Industry Leading Noise Canceling Headphones",
+    "brand": "Sony",
+    "category": "over-ear headphones",
+    "price": 279.99,
+    "rating": 4.4,
+    "review_count": 18432,
+    "features": [
+      "Industry-leading noise cancellation with 8 microphones and 2 processors",
+      "30-hour battery life with quick charge (3 min = 3 hours)",
+      "Crystal-clear hands-free calling with AI-based noise reduction",
+      "Multipoint connection — pair with 2 devices simultaneously",
+      "Speak-to-Chat pauses music when you speak",
+      "DSEE Extreme audio upscaling for compressed files",
+      "Adaptive Sound Control adjusts to your environment",
+      "Lightweight at 250g with soft earcups for all-day comfort"
+    ],
+    "description": "The WH-1000XM5 sets a new standard in noise cancelling with dual processors and 8 microphones. Its 30-hour battery and premium audio make it the best choice for frequent travellers and remote workers.",
+    "tags": ["noise-canceling", "premium", "over-ear", "travel", "work", "sony", "wireless", "anc"],
+    "reviews": [
+      {
+        "rating": 5,
+        "title": "Best noise-cancelling headphones I have ever owned",
+        "body": "I travel 3-4 times a month and these are a game changer. The ANC is miles ahead of my old QC35s. Battery life is exactly as advertised. Comfortable for 6-hour flights with no ear fatigue.",
+        "verified": true
+      },
+      {
+        "rating": 4,
+        "title": "Great sound but non-foldable design is inconvenient",
+        "body": "The audio quality and ANC are top-notch. My only complaint is they don't fold flat like the XM4s. The case is also bigger. If you can get past that, these are outstanding.",
+        "verified": true
+      },
+      {
+        "rating": 3,
+        "title": "Excellent ANC but tight fit for larger heads",
+        "body": "The noise cancellation is the best I have tried but the headband feels tight after 2-3 hours. Sound quality is excellent. Call quality is noticeably better than competitors.",
+        "verified": true
+      }
+    ],
+    "qa_pairs": [
+      {
+        "question": "Does it have a 3.5mm audio jack for wired use?",
+        "answer": "Yes, it includes a 3.5mm audio cable for wired listening when the battery is dead."
+      },
+      {
+        "question": "Is it good for gym or sports use?",
+        "answer": "Not ideal for the gym — no sweat or water resistance rating. It is primarily designed for travel and office use."
+      },
+      {
+        "question": "Does it fold flat?",
+        "answer": "No, unlike the XM4 it does not fold flat. It folds into a compact oval shape and comes with a hard shell case."
+      }
+    ]
+  },
+  {
+    "asin": "MQDY3LL/A",
+    "title": "Apple AirPods Pro (2nd Generation) with USB-C Charging Case",
+    "brand": "Apple",
+    "category": "in-ear earbuds",
+    "price": 189.99,
+    "rating": 4.6,
+    "review_count": 42817,
+    "features": [
+      "Active Noise Cancellation up to 2x more effective than 1st generation",
+      "Transparency Mode with Adaptive Audio",
+      "Personalized Spatial Audio with dynamic head tracking",
+      "Up to 6 hours listening time with ANC on, 30 hours total with case",
+      "IPX4 water and sweat resistance",
+      "Conversation Awareness — lowers volume when you speak",
+      "USB-C and MagSafe wireless charging",
+      "Works best with Apple ecosystem (iPhone, iPad, Mac, Apple Watch)"
+    ],
+    "description": "AirPods Pro 2nd Gen deliver next-level ANC and Transparency Mode. Tight integration with Apple devices makes them the premium choice for iPhone users wanting the best earbuds experience.",
+    "tags": ["noise-canceling", "earbuds", "apple", "premium", "in-ear", "ios", "iphone", "workout", "water-resistant"],
+    "reviews": [
+      {
+        "rating": 5,
+        "title": "Perfect for iPhone users — seamless experience",
+        "body": "The integration with my iPhone and MacBook is flawless. ANC is excellent, Transparency Mode is the best I have used — you forget you are wearing earbuds. Battery lasts all day with the case.",
+        "verified": true
+      },
+      {
+        "rating": 4,
+        "title": "Great ANC and sound, pricey for non-Apple users",
+        "body": "If you are in the Apple ecosystem, buy these immediately. On Android they work fine but you lose most of the smart features. Sound quality is excellent for earbuds in this class.",
+        "verified": true
+      },
+      {
+        "rating": 5,
+        "title": "I wear these at the gym every day",
+        "body": "The IPX4 rating means I can sweat heavily and they never skip. Secure fit in my ears even during HIIT. The Conversation Awareness feature is genuinely useful.",
+        "verified": true
+      }
+    ],
+    "qa_pairs": [
+      {
+        "question": "Do they work with Android phones?",
+        "answer": "Yes but with limited features. Basic audio and ANC work on Android. Features like Personalized Spatial Audio, Siri, and seamless device switching require Apple devices."
+      },
+      {
+        "question": "Are they good for phone calls?",
+        "answer": "Yes, call quality is excellent. The microphone system suppresses background noise very well and callers report hearing voices clearly even in noisy environments."
+      },
+      {
+        "question": "How long does each charge last?",
+        "answer": "Up to 6 hours of listening with ANC on per earbud charge. The charging case provides an additional 24 hours, giving 30 hours total."
+      }
+    ]
+  },
+  {
+    "asin": "B09JL5P2GL",
+    "title": "Bose QuietComfort 45 Bluetooth Wireless Noise Cancelling Headphones",
+    "brand": "Bose",
+    "category": "over-ear headphones",
+    "price": 229.00,
+    "rating": 4.5,
+    "review_count": 22156,
+    "features": [
+      "World-class noise cancellation with Quiet Mode and Aware Mode",
+      "22-hour battery life with 15-minute quick charge for 3 hours of use",
+      "TriPort acoustic architecture for deep, clear audio",
+      "Lightweight and foldable design at 240g",
+      "USB-C charging and 3.5mm audio jack included",
+      "Multi-device pairing — switch between 2 devices",
+      "Premium plush earcups for all-day comfort",
+      "Google Assistant and Amazon Alexa built-in"
+    ],
+    "description": "The QuietComfort 45 continues Bose's legacy of class-leading comfort and noise cancellation. Ideal for long listening sessions, flights, and open-plan offices.",
+    "tags": ["noise-canceling", "bose", "over-ear", "comfort", "travel", "office", "premium", "foldable"],
+    "reviews": [
+      {
+        "rating": 5,
+        "title": "Most comfortable headphones for all-day wear",
+        "body": "I wear these 8 hours a day working from home. They are so comfortable I sometimes forget I am wearing them. The ANC is excellent for blocking out kids and construction noise.",
+        "verified": true
+      },
+      {
+        "rating": 4,
+        "title": "Exceptional comfort and great ANC — sound is slightly warm",
+        "body": "If comfort is your priority these win. The ANC is a touch behind Sony XM5 but the comfort and build quality are unmatched. Sound signature leans warm but sounds wonderful for long sessions.",
+        "verified": true
+      },
+      {
+        "rating": 4,
+        "title": "Solid upgrade from QC35",
+        "body": "The USB-C charging is a welcome change from the QC35. Battery life is good but not as impressive as Sony. The folding design makes it easy to pack for travel.",
+        "verified": true
+      }
+    ],
+    "qa_pairs": [
+      {
+        "question": "Can I use these for voice calls?",
+        "answer": "Yes, the built-in microphones handle calls well. Background noise suppression is effective though slightly below Sony XM5 in voice clarity tests."
+      },
+      {
+        "question": "How does the noise cancellation compare to Sony WH-1000XM5?",
+        "answer": "Both are top-tier but Sony's XM5 generally edges out the QC45 in pure ANC performance. However, many users prefer the QC45 for its superior comfort and foldable design."
+      },
+      {
+        "question": "Is it good for sleeping on a plane?",
+        "answer": "Yes, the lightweight design and soft earcups make it comfortable for sleeping. The strong ANC eliminates most cabin engine noise."
+      }
+    ]
+  },
+  {
+    "asin": "B0CCY5J3FV",
+    "title": "Bose QuietComfort Ultra Earbuds — Wireless Noise Cancelling",
+    "brand": "Bose",
+    "category": "in-ear earbuds",
+    "price": 249.00,
+    "rating": 4.3,
+    "review_count": 5841,
+    "features": [
+      "Bose's best-ever ANC in an earbud form factor",
+      "Immersive Audio with CustomTune technology",
+      "Quiet Mode and Aware Mode with WorldSense head tracking",
+      "6-hour battery per charge, 24 hours total with case",
+      "IPX4 sweat and water resistance",
+      "Fit Stability bands included in multiple sizes",
+      "Multipoint pairing with 2 devices",
+      "USB-C charging case"
+    ],
+    "description": "The QC Ultra Earbuds bring Bose's legendary comfort and ANC engineering to a true wireless earbud form. Premium price for premium performance.",
+    "tags": ["noise-canceling", "bose", "earbuds", "premium", "in-ear", "water-resistant", "travel"],
+    "reviews": [
+      {
+        "rating": 5,
+        "title": "Best ANC earbuds — period",
+        "body": "I have tried Sony WF-1000XM5 and AirPods Pro. These are quieter. The Immersive Audio mode is genuinely impressive for music. Build quality feels premium.",
+        "verified": true
+      },
+      {
+        "rating": 4,
+        "title": "Great ANC but battery life could be better",
+        "body": "The noise cancellation is the best available in earbuds. Only 6 hours per charge is disappointing for the price. If battery life is critical, look at Sony WF-1000XM5.",
+        "verified": true
+      },
+      {
+        "rating": 3,
+        "title": "Excellent tech, inconsistent fit for some ear shapes",
+        "body": "The ANC is incredible but I struggled to get a secure fit. The stability bands help but I still had issues during runs. Sound quality is outstanding when sealed properly.",
+        "verified": true
+      }
+    ],
+    "qa_pairs": [
+      {
+        "question": "Are these good for running?",
+        "answer": "They are water-resistant (IPX4) and come with stability bands, but some users report fit issues during intense exercise. They are better suited for travel and office use than vigorous sports."
+      },
+      {
+        "question": "How does this compare to AirPods Pro 2?",
+        "answer": "Both are top-tier. QC Ultra Earbuds generally have slightly stronger ANC. AirPods Pro 2 offer better Apple ecosystem integration and comparable overall performance at a lower price."
+      }
+    ]
+  },
+  {
+    "asin": "B09C4GKQ4G",
+    "title": "Samsung Galaxy Buds2 Pro True Wireless Earbuds",
+    "brand": "Samsung",
+    "category": "in-ear earbuds",
+    "price": 139.99,
+    "rating": 4.2,
+    "review_count": 9274,
+    "features": [
+      "Intelligent Active Noise Cancellation up to 3x stronger than Galaxy Buds Pro",
+      "Hi-Fi 24-bit audio with 360° Audio",
+      "Comfortable ergonomic fit designed for small ears",
+      "IPX7 water resistance — fully sweat and splash proof",
+      "5 hours battery per charge, 18 hours total with case",
+      "Seamless auto-switch between Galaxy devices",
+      "Bixby, Alexa, and Google Assistant support",
+      "Wear detection pauses music when removed"
+    ],
+    "description": "Galaxy Buds2 Pro deliver premium ANC and Hi-Fi sound in a compact, comfortable design. Best suited for Samsung Galaxy device owners.",
+    "tags": ["noise-canceling", "samsung", "earbuds", "in-ear", "android", "galaxy", "water-resistant", "workout"],
+    "reviews": [
+      {
+        "rating": 5,
+        "title": "Perfect companion for Galaxy phones",
+        "body": "The auto-switching between my Galaxy phone, tablet, and laptop is seamless. ANC is very effective. Hi-Fi audio mode is noticeably better than my previous earbuds. IPX7 means I can wear them in light rain.",
+        "verified": true
+      },
+      {
+        "rating": 4,
+        "title": "Great earbuds, but limited without Samsung devices",
+        "body": "On my Galaxy S23 these are flawless. I tried them on an iPhone and lost most features. If you are in the Samsung ecosystem these are a no-brainer.",
+        "verified": true
+      },
+      {
+        "rating": 3,
+        "title": "Battery life is disappointing for the price",
+        "body": "5 hours per charge with ANC on is below average for this price range. Sound and ANC quality are great but I need to charge them every evening.",
+        "verified": true
+      }
+    ],
+    "qa_pairs": [
+      {
+        "question": "Are they good for small ears?",
+        "answer": "Yes, Samsung specifically designed the Buds2 Pro with an ergonomic shape for smaller ear canals. Multiple ear tip sizes are included."
+      },
+      {
+        "question": "Can I use them while swimming?",
+        "answer": "No — IPX7 means they can withstand sweat and rain but are not rated for submersion swimming."
+      }
+    ]
+  },
+  {
+    "asin": "B0BLJQXBWX",
+    "title": "Sony WF-1000XM5 True Wireless Earbuds with Noise Canceling",
+    "brand": "Sony",
+    "category": "in-ear earbuds",
+    "price": 229.99,
+    "rating": 4.3,
+    "review_count": 7635,
+    "features": [
+      "Industry-leading noise cancellation in a compact earbud",
+      "30% smaller and 25% lighter than WF-1000XM4",
+      "8 hours battery with ANC, 24 hours total with case",
+      "Hi-Res Audio Wireless via LDAC codec",
+      "IPX4 water and sweat resistant",
+      "Precise Voice Pickup with 5 microphones for clear calls",
+      "Multipoint connection — 2 devices simultaneously",
+      "Quick Charge: 5 min = 60 min playback"
+    ],
+    "description": "The WF-1000XM5 are Sony's best true wireless earbuds with class-leading ANC, LDAC Hi-Res audio, and improved comfort over previous generations.",
+    "tags": ["noise-canceling", "sony", "earbuds", "premium", "in-ear", "hi-res", "ldac", "wireless"],
+    "reviews": [
+      {
+        "rating": 5,
+        "title": "Best-in-class ANC earbuds",
+        "body": "The noise cancellation is as good as my over-ear headphones. Sound quality in LDAC mode is stunning. Much smaller and lighter than XM4. The fit is comfortable for long sessions.",
+        "verified": true
+      },
+      {
+        "rating": 4,
+        "title": "Excellent but the case could be smaller",
+        "body": "Sound and ANC are both top-tier. The case is still large compared to AirPods Pro. LDAC requires a compatible Android phone — iPhone users will not get Hi-Res audio.",
+        "verified": true
+      },
+      {
+        "rating": 4,
+        "title": "Great for commuting, not the best for calls",
+        "body": "The ANC is spectacular for public transport. Call quality is decent but AirPods Pro handle windy outdoor calls better. Would buy again for commute use.",
+        "verified": true
+      }
+    ],
+    "qa_pairs": [
+      {
+        "question": "Do these work with iPhone for full features?",
+        "answer": "Yes they work with iPhone for standard AAC audio and ANC. However, LDAC Hi-Res audio requires an Android device. iPhone users will still get excellent sound but not the Hi-Res tier."
+      },
+      {
+        "question": "How is battery life compared to competitors?",
+        "answer": "8 hours with ANC on is among the best in the premium earbud category. The 5-minute quick charge for 60 minutes of playback is very convenient."
+      }
+    ]
+  },
+  {
+    "asin": "B09Y6NHWNN",
+    "title": "Jabra Evolve2 55 UC Stereo Wireless Headset for Business",
+    "brand": "Jabra",
+    "category": "over-ear headphones",
+    "price": 299.00,
+    "rating": 4.4,
+    "review_count": 3841,
+    "features": [
+      "Hybrid Active Noise Cancellation optimized for open offices",
+      "Professional-grade call performance with 6 microphone array",
+      "37-hour battery life with quick charge (15 min = 8 hours)",
+      "Busylight indicator signals availability to colleagues",
+      "Works with all major UC platforms: Zoom, Teams, Meet, Slack",
+      "Multipoint connection to 3 devices simultaneously",
+      "Comfort-fit ear cushions for all-day wear",
+      "Wireless range up to 30 metres / 100 feet"
+    ],
+    "description": "The Evolve2 55 is purpose-built for remote and hybrid workers who spend hours on video calls. Professional-grade microphones and UC platform compatibility make it the top choice for knowledge workers.",
+    "tags": ["office", "business", "calls", "meetings", "work-from-home", "jabra", "professional", "over-ear", "teams", "zoom"],
+    "reviews": [
+      {
+        "rating": 5,
+        "title": "The best headset for remote work — period",
+        "body": "I am on Teams calls 6-7 hours a day. The mic quality is exceptional — colleagues consistently say I sound better than anyone else on the call. ANC is great for home offices with kids around.",
+        "verified": true
+      },
+      {
+        "rating": 4,
+        "title": "Premium build, worth every penny for professionals",
+        "body": "37 hours of battery is incredible — I charge once a week. The busylight is a surprisingly useful feature. Expensive but pays for itself in reduced call frustrations.",
+        "verified": true
+      },
+      {
+        "rating": 4,
+        "title": "Excellent for calls, music is secondary",
+        "body": "Tuned primarily for voice clarity, not music enjoyment. ANC and call performance are outstanding. If you want the best music headphones look elsewhere; for work calls these are unbeatable.",
+        "verified": true
+      }
+    ],
+    "qa_pairs": [
+      {
+        "question": "Is this good for music listening as well as calls?",
+        "answer": "It is primarily optimized for voice calls and business use. Music sounds decent but lacks the richness of Sony or Bose headphones. Buy it for call quality, not music quality."
+      },
+      {
+        "question": "Does it work with Zoom and Microsoft Teams?",
+        "answer": "Yes, the Evolve2 55 UC is certified for Microsoft Teams, Zoom, Google Meet, Cisco Webex, and most other major UC platforms."
+      }
+    ]
+  },
+  {
+    "asin": "B0BWXTMHWD",
+    "title": "Anker Soundcore Q45 Adaptive Active Noise Cancelling Headphones",
+    "brand": "Anker Soundcore",
+    "category": "over-ear headphones",
+    "price": 55.99,
+    "rating": 4.3,
+    "review_count": 14721,
+    "features": [
+      "Adaptive Active Noise Cancellation — adjusts to your environment",
+      "50-hour battery life — one of the longest in its class",
+      "Hi-Res Audio certified with 40mm drivers",
+      "Transparency Mode for ambient sound awareness",
+      "Foldable design with carrying case included",
+      "Quick Charge: 5 min = 4 hours playback",
+      "Multipoint connection to 2 devices",
+      "EQ customization via Soundcore app"
+    ],
+    "description": "The Soundcore Q45 delivers remarkable value — ANC, Hi-Res audio, and 50-hour battery at less than $60. A top choice for budget-conscious buyers who refuse to compromise on features.",
+    "tags": ["budget", "anker", "over-ear", "noise-canceling", "value", "affordable", "wireless", "long-battery"],
+    "reviews": [
+      {
+        "rating": 5,
+        "title": "Incredible value — beats headphones 3x the price on battery",
+        "body": "50 hours of battery is genuinely life-changing for travel. ANC is not Sony-level but impressively effective for $55. Comfortable enough for 4-5 hour sessions. Best budget buy I have made.",
+        "verified": true
+      },
+      {
+        "rating": 4,
+        "title": "Excellent budget option with smart ANC",
+        "body": "The adaptive ANC actually works well on public transport. Sound quality through the Soundcore app is customizable and punchy. Build quality is plastic but feels sturdy.",
+        "verified": true
+      },
+      {
+        "rating": 4,
+        "title": "Great for students and commuters on a tight budget",
+        "body": "For students or anyone wanting ANC without spending $200+, these are a revelation. The 50-hour battery means charging once a week. Highly recommend for the price.",
+        "verified": true
+      }
+    ],
+    "qa_pairs": [
+      {
+        "question": "How does the ANC compare to Sony or Bose?",
+        "answer": "The ANC is effective for everyday use like offices and public transport, but noticeably less powerful than Sony WH-1000XM5 or Bose QC45. At under $60, it is the best ANC performance at this price point."
+      },
+      {
+        "question": "Is the sound quality good enough for audiophiles?",
+        "answer": "The Hi-Res Audio certification and 40mm drivers produce surprisingly good sound. With EQ adjustments in the Soundcore app, it can satisfy most listeners. Audiophiles seeking studio accuracy should look higher."
+      }
+    ]
+  },
+  {
+    "asin": "B09BKST3RN",
+    "title": "JBL Tune 760NC Wireless Over-Ear Headphones with Active Noise Cancelling",
+    "brand": "JBL",
+    "category": "over-ear headphones",
+    "price": 69.95,
+    "rating": 4.2,
+    "review_count": 19038,
+    "features": [
+      "Active Noise Cancelling with ANC button for quick toggle",
+      "35 hours battery life without ANC, 35 hours with ANC off",
+      "JBL Pure Bass Sound with 40mm drivers",
+      "Ambient Aware and TalkThru modes",
+      "Lightweight foldable design for travel",
+      "Google Assistant and Amazon Alexa compatible",
+      "Hands-free calling with built-in microphone",
+      "USB-C charging"
+    ],
+    "description": "The JBL Tune 760NC brings JBL's famous bass-forward sound signature with ANC to under $70. A great option for music lovers on a budget who want a reliable everyday headphone.",
+    "tags": ["budget", "jbl", "over-ear", "noise-canceling", "bass", "affordable", "wireless", "foldable"],
+    "reviews": [
+      {
+        "rating": 5,
+        "title": "Best bass headphones under $70",
+        "body": "The bass on these is phenomenal for the price. JBL's sound signature really shines here. ANC is decent — blocks out most ambient noise. 35 hours of battery is excellent.",
+        "verified": true
+      },
+      {
+        "rating": 4,
+        "title": "Solid budget headphones with punchy sound",
+        "body": "For $70 you get a lot of headphone. The JBL bass sound is immediately noticeable. ANC is basic but functional. Foldable design is great for daily commuting.",
+        "verified": true
+      },
+      {
+        "rating": 3,
+        "title": "Good sound but call quality is mediocre",
+        "body": "Fantastic for music at this price. The microphone quality for calls is average — callers say my voice sounds distant in noisy environments. Buy for music, not calls.",
+        "verified": true
+      }
+    ],
+    "qa_pairs": [
+      {
+        "question": "Is the bass overwhelming or well-balanced?",
+        "answer": "JBL tunes these for a bass-forward sound signature. The bass is prominent but not muddy. If you prefer neutral or analytical sound, these may not suit you. For pop, hip-hop, and EDM they are excellent."
+      },
+      {
+        "question": "Can I use these at the gym?",
+        "answer": "They are not water-resistant, so heavy sweating is a risk. For light gym use such as weightlifting or walking on a treadmill they are fine, but avoid them for intense cardio where you sweat heavily."
+      }
+    ]
+  },
+  {
+    "asin": "B09JQMJHXY",
+    "title": "Beats Fit Pro True Wireless Earbuds — Active Noise Cancelling",
+    "brand": "Beats",
+    "category": "in-ear earbuds",
+    "price": 149.95,
+    "rating": 4.4,
+    "review_count": 25317,
+    "features": [
+      "Active Noise Cancelling and Transparency Mode",
+      "Flexible wingtips for secure fit during intense workouts",
+      "IPX4 sweat and water resistant — gym and sports certified",
+      "6 hours battery per earbud, 21 hours total with case",
+      "Compatible with both Apple and Android",
+      "Apple H1 chip for instant connectivity with iPhone",
+      "Spatial Audio with dynamic head tracking on Apple devices",
+      "On-ear controls for music, calls, and volume"
+    ],
+    "description": "Beats Fit Pro combine professional ANC and sports-secure fit. The flexible wingtips make them the go-to choice for athletes who want ANC earbuds that stay in during any workout.",
+    "tags": ["sports", "workout", "gym", "earbuds", "beats", "noise-canceling", "in-ear", "apple", "fitness", "water-resistant"],
+    "reviews": [
+      {
+        "rating": 5,
+        "title": "Best workout earbuds I have ever owned",
+        "body": "I run 5 miles every morning and these have never fallen out once. The ANC is great for blocking traffic noise on outdoor runs. IPX4 handles all my sweat with no issues.",
+        "verified": true
+      },
+      {
+        "rating": 5,
+        "title": "Perfect gym companion — stay in no matter what you do",
+        "body": "CrossFit, HIIT, boxing — these stay in my ears through everything. The wingtips are the key difference from standard earbuds. Sound quality is excellent for workout music.",
+        "verified": true
+      },
+      {
+        "rating": 4,
+        "title": "Great for sports, just average for office use",
+        "body": "The wingtips make them uncomfortable for all-day office wearing. As dedicated workout earbuds they are excellent. ANC is solid. Battery life is fine for daily workouts.",
+        "verified": true
+      }
+    ],
+    "qa_pairs": [
+      {
+        "question": "Are these the best earbuds for running?",
+        "answer": "They are among the best specifically because of the flexible wingtips that lock the earbuds in place during movement. The IPX4 water resistance and effective ANC for outdoor runs are also major advantages."
+      },
+      {
+        "question": "How do they compare to AirPods Pro for the gym?",
+        "answer": "For pure gym/sports use, Beats Fit Pro typically beats AirPods Pro because the wingtips create a much more secure physical fit during intense movement. AirPods Pro are better for everyday and travel use."
+      }
+    ]
+  },
+  {
+    "asin": "B09TL3CQSF",
+    "title": "Sennheiser MOMENTUM 4 Wireless Headphones with Adaptive Noise Cancellation",
+    "brand": "Sennheiser",
+    "category": "over-ear headphones",
+    "price": 249.95,
+    "rating": 4.5,
+    "review_count": 6184,
+    "features": [
+      "Adaptive Noise Cancellation that adjusts to your environment",
+      "60-hour battery life — best-in-class battery",
+      "High-fidelity sound with 42mm transducers",
+      "Transparent Hearing mode for ambient awareness",
+      "Customizable EQ via Sennheiser Smart Control app",
+      "Foldable and lightweight at 293g with premium finish",
+      "Crystal-clear call quality with 4-microphone beamforming",
+      "Multipoint connection — 2 devices simultaneously"
+    ],
+    "description": "The Momentum 4 is Sennheiser's audiophile-grade wireless headphone with adaptive ANC and the best battery life of any premium headphone. Ideal for discerning listeners and long-haul travellers.",
+    "tags": ["audiophile", "sennheiser", "premium", "over-ear", "noise-canceling", "long-battery", "hi-fi", "wireless"],
+    "reviews": [
+      {
+        "rating": 5,
+        "title": "60 hours battery is a game changer for travel",
+        "body": "I flew from New York to Tokyo without needing to charge. The sound quality is the best I have heard in wireless headphones. ANC is excellent — not quite XM5 level but very close. Worth every dollar.",
+        "verified": true
+      },
+      {
+        "rating": 5,
+        "title": "Audiophile sound in a wireless package",
+        "body": "As someone who normally only uses wired headphones, the Momentum 4 convinced me wireless can sound great. The midrange detail and soundstage are exceptional. EQ app is powerful.",
+        "verified": true
+      },
+      {
+        "rating": 4,
+        "title": "Best battery life, competitive ANC, excellent sound",
+        "body": "60 hours is real-world accurate. I charge mine once every 2 weeks. The headphones look and feel premium. Only reason not 5 stars is the 3.5mm cable is sold separately.",
+        "verified": true
+      }
+    ],
+    "qa_pairs": [
+      {
+        "question": "How does the sound compare to Sony WH-1000XM5?",
+        "answer": "Both are excellent but differ in tuning. Sennheiser Momentum 4 is more neutral and analytical — preferred by audiophiles and classical/jazz listeners. Sony XM5 has more bass emphasis and is preferred for pop and hip-hop."
+      },
+      {
+        "question": "What is the battery life like in real-world use?",
+        "answer": "The 60-hour rating is accurate in real-world testing at moderate volumes without ANC. With ANC active at moderate volume expect around 50-55 hours. Substantially longer than any competitor."
+      }
+    ]
+  },
+  {
+    "asin": "B0BXNZMF6Q",
+    "title": "1MORE SonoFlow SE Wireless Over Ear Headphones, 70Hr Playtime",
+    "brand": "1MORE",
+    "category": "over-ear headphones",
+    "price": 39.99,
+    "rating": 4.1,
+    "review_count": 8621,
+    "features": [
+      "70-hour battery life — longest in its price range",
+      "Hybrid Active Noise Cancellation",
+      "40mm composite drivers with LDAC Hi-Res audio support",
+      "Deep bass sound profile optimized for popular music genres",
+      "Foldable and lightweight for portability",
+      "USB-C fast charging — 10 min = 5 hours playback",
+      "Bluetooth 5.3 with multipoint connection",
+      "Soft memory foam earcups"
+    ],
+    "description": "The 1MORE SonoFlow SE delivers 70 hours of battery and hybrid ANC at an unbeatable $40 price point. The best ultra-budget option for students and everyday users.",
+    "tags": ["budget", "ultra-budget", "over-ear", "long-battery", "value", "affordable", "1more", "wireless", "student"],
+    "reviews": [
+      {
+        "rating": 5,
+        "title": "70 hours battery for $40 — absolutely unreal value",
+        "body": "I charge these once every two weeks. ANC is basic but helps on public transport. Sound is warm and bassy which works great for my music taste. Highly recommended for students.",
+        "verified": true
+      },
+      {
+        "rating": 4,
+        "title": "Best budget headphones available",
+        "body": "At $40 these should cost twice as much. The LDAC support is shocking for this price. ANC is not premium quality but functional. Build is plastic but holds up fine.",
+        "verified": true
+      },
+      {
+        "rating": 3,
+        "title": "Great battery and value, average ANC",
+        "body": "For commuting and studying these are great. The ANC barely blocks conversation noise but handles constant background hum well. Do not expect Sony or Bose ANC quality for $40.",
+        "verified": true
+      }
+    ],
+    "qa_pairs": [
+      {
+        "question": "Is this a good first noise-cancelling headphone?",
+        "answer": "Yes, it is an excellent entry-level ANC headphone. The ANC reduces background noise noticeably without being as effective as premium options. The 70-hour battery and low price make it ideal as a first ANC purchase."
+      },
+      {
+        "question": "Are these suitable for working from home?",
+        "answer": "Yes for general focus and background noise reduction. The ANC helps block household sounds. Call quality is adequate for occasional calls but not professional-grade like Jabra headsets."
+      }
+    ]
+  }
+]

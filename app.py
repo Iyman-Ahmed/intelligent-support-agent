@@ -16,7 +16,7 @@ import os
 import sys
 import time
 import types as _types
-from typing import List
+from typing import Any, List
 
 # ---------------------------------------------------------------------------
 # Compatibility patches — MUST run before `import gradio`
@@ -68,6 +68,13 @@ from app.session_store import SessionStore
 _agent: SupportAgentCore | None = None
 _store: SessionStore | None = None
 _init_lock: asyncio.Lock | None = None
+
+# ---------------------------------------------------------------------------
+# Amazon Q&A router — lazily initialised on first Amazon query
+# ---------------------------------------------------------------------------
+
+_amazon_router: Any = None
+_amazon_lock: asyncio.Lock | None = None
 
 # ---------------------------------------------------------------------------
 # Response cache — avoids repeat Gemini calls for identical FAQ questions.
@@ -182,6 +189,23 @@ async def _ensure_agent() -> None:
             raise
 
 
+async def _ensure_amazon_router() -> None:
+    """Initialise the Amazon Q&A router on first call (lazy, zero cost)."""
+    global _amazon_router, _amazon_lock
+
+    if _amazon_router is not None:
+        return
+
+    if _amazon_lock is None:
+        _amazon_lock = asyncio.Lock()
+
+    async with _amazon_lock:
+        if _amazon_router is None:
+            from app.agents.router import AmazonQARouter
+            _amazon_router = AmazonQARouter()
+            print("✅ Amazon Q&A router initialised")
+
+
 # ---------------------------------------------------------------------------
 # Demo presets
 # ---------------------------------------------------------------------------
@@ -201,8 +225,17 @@ DEMO_CUSTOMERS = {
     "VIP Enterprise Customer  (vip@enterprise.com)": ("vip@enterprise.com", None),
 }
 
+AMAZON_DEMO_PROMPTS = [
+    "Tell me about the Sony WH-1000XM5",
+    "Which headphones are best for noise cancellation?",
+    "Compare AirPods Pro vs Bose QC45",
+    "What's a good budget option under $60?",
+    "What do customers say about the Bose QC Ultra?",
+    "Recommend headphones for working from home",
+]
+
 # ---------------------------------------------------------------------------
-# Chat handler
+# Support chat handler
 # ---------------------------------------------------------------------------
 
 async def chat(
@@ -318,7 +351,82 @@ async def inject_prompt(prompt: str, history, session_state, selected_customer):
 
 
 # ---------------------------------------------------------------------------
-# Status / metadata panels
+# Amazon Q&A handler
+# ---------------------------------------------------------------------------
+
+async def amazon_chat(
+    user_message: str,
+    history: List[dict],
+    agent_label_state: dict,
+) -> tuple:
+    """Amazon Q&A handler — routes between Agent 1 (KB) and Agent 2 (Gemini)."""
+    print(f"[AMAZON] >>> {user_message[:80]}")
+
+    if not user_message.strip():
+        return history, agent_label_state, _amazon_label_html(agent_label_state)
+
+    try:
+        await _ensure_amazon_router()
+    except Exception as exc:
+        err = f"⚠️ Router init failed: {exc}"
+        history = history + [
+            {"role": "user",      "content": user_message},
+            {"role": "assistant", "content": err},
+        ]
+        return history, agent_label_state, _amazon_label_html(agent_label_state)
+
+    start = time.monotonic()
+    try:
+        answer, label = await _amazon_router.route(user_message)
+    except Exception as exc:
+        answer = f"⚠️ Error: {exc}"
+        label  = "Error"
+
+    elapsed = round((time.monotonic() - start) * 1000)
+    agent_label_state = {"label": label, "elapsed_ms": elapsed}
+
+    history = history + [
+        {"role": "user",      "content": user_message},
+        {"role": "assistant", "content": answer or "No answer generated."},
+    ]
+    print(f"[AMAZON] <<< {label} — {elapsed}ms")
+    return history, agent_label_state, _amazon_label_html(agent_label_state)
+
+
+async def amazon_reset():
+    return [], {}, _amazon_label_html({})
+
+
+async def amazon_inject(prompt: str, history, agent_label_state):
+    return await amazon_chat(prompt, history, agent_label_state)
+
+
+def _amazon_label_html(state: dict) -> str:
+    label   = state.get("label", "—")
+    elapsed = state.get("elapsed_ms", "—")
+    elapsed_str = f"{elapsed} ms" if isinstance(elapsed, int) else "—"
+
+    if "Agent 1" in label:
+        color, icon = "#16a34a", "🟢"
+    elif "Agent 2" in label:
+        color, icon = "#7c3aed", "🟣"
+    elif "Error" in label:
+        color, icon = "#dc2626", "🔴"
+    else:
+        color, icon = "#6b7280", "⚪"
+
+    return (
+        f'<div style="{_PANEL}">'
+        f'<div style="color:{color};font-weight:bold">{icon} {label}</div>'
+        f'<div style="margin-top:4px">Response time: <b>{elapsed_str}</b></div>'
+        f'<div style="margin-top:6px;font-size:11px;color:#6b7280">'
+        f'🟢 Agent 1 = TF-IDF (free) &nbsp;|&nbsp; 🟣 Agent 2 = Gemini reasoning</div>'
+        f'</div>'
+    )
+
+
+# ---------------------------------------------------------------------------
+# Status / metadata panels (support chat)
 # ---------------------------------------------------------------------------
 
 STATUS_META = {
@@ -370,7 +478,8 @@ def _meta_html(state: dict) -> str:
 # ---------------------------------------------------------------------------
 
 CSS = """
-#chatbot { height: 500px; }
+#chatbot      { height: 500px; }
+#amazon-chat  { height: 500px; }
 footer { display: none !important; }
 .api-docs { display: none !important; }
 .built-with { display: none !important; }
@@ -382,104 +491,190 @@ with gr.Blocks(
     css=CSS,
 ) as demo:
 
-    session_state = gr.State({})
-
     gr.Markdown("""
     # 🤖 Intelligent Customer Support Agent
     **Powered by Gemini 2.0 Flash (free tier)** &nbsp;|&nbsp; Multi-turn memory &nbsp;|&nbsp;
     Tool use &nbsp;|&nbsp; Auto-escalation &nbsp;|&nbsp; Ticket creation
     """)
 
-    with gr.Row(equal_height=True):
+    with gr.Tabs():
 
-        with gr.Column(scale=4):
-            chatbot = gr.Chatbot(
-                elem_id="chatbot",
-                label="Chat with Aria (AI Support Agent)",
-                type="messages",
-                show_copy_button=True,
+        # ================================================================
+        # Tab 1 — TechFlow Customer Support
+        # ================================================================
+        with gr.Tab("🎧 TechFlow Support"):
+
+            session_state = gr.State({})
+
+            with gr.Row(equal_height=True):
+
+                with gr.Column(scale=4):
+                    chatbot = gr.Chatbot(
+                        elem_id="chatbot",
+                        label="Chat with Aria (AI Support Agent)",
+                        type="messages",
+                        show_copy_button=True,
+                    )
+                    with gr.Row():
+                        msg_input = gr.Textbox(
+                            placeholder="Ask anything — refund, order status, account help...",
+                            show_label=False,
+                            scale=6,
+                            container=False,
+                            autofocus=True,
+                        )
+                        send_btn = gr.Button("Send ➤", variant="primary", scale=1, min_width=80)
+
+                with gr.Column(scale=2, min_width=240):
+
+                    gr.Markdown("#### 👤 Demo Customer")
+                    customer_dd = gr.Dropdown(
+                        choices=list(DEMO_CUSTOMERS.keys()),
+                        value="None (anonymous)",
+                        label="",
+                        info="Agent looks up this customer when you give their email",
+                    )
+
+                    gr.Markdown("#### ⚡ Quick Prompts")
+                    prompt_btns = []
+                    for p in DEMO_PROMPTS:
+                        label = p[:44] + ("…" if len(p) > 44 else "")
+                        b = gr.Button(label, size="sm", variant="secondary")
+                        prompt_btns.append((b, p))
+
+                    gr.Markdown("#### 📊 Status")
+                    status_display = gr.HTML(value=_status_html({}))
+
+                    gr.Markdown("#### 🔧 Last Tool Calls")
+                    meta_display = gr.HTML(value=_meta_html({}))
+
+                    reset_btn = gr.Button("🔄 New Conversation", variant="secondary", size="sm")
+
+            with gr.Accordion("ℹ️ How the agent works", open=False):
+                gr.Markdown("""
+                **On every message:**
+                1. Escalation pre-check — legal keywords, human request, VIP flag
+                2. Gemini 2.0 Flash processes message + full history with tools
+                3. Tool loop — Gemini calls tools, reads results, continues until done
+                4. Post-check — sentiment scored by Gemini Flash
+
+                **Tools:** `search_knowledge_base` · `lookup_customer` · `create_ticket` ·
+                `check_order_status` · `escalate_to_human` · `send_email_reply`
+
+                **Auto-escalation:** legal words · "speak to human/manager" ·
+                VIP customer · refund > $500 · sentiment < -0.7 · 8+ turns unresolved
+
+                **Cost:** 100% free — uses Gemini 2.0 Flash free tier (1,500 requests/day).
+                Get your free API key at [aistudio.google.com](https://aistudio.google.com/apikey).
+                """)
+
+            # ── Support tab event wiring ─────────────────────────────────
+            _inputs  = [msg_input, chatbot, session_state, customer_dd]
+            _outputs = [chatbot, session_state, status_display, meta_display]
+
+            send_btn.click(fn=chat, inputs=_inputs, outputs=_outputs, api_name=False).then(
+                fn=lambda: gr.update(value=""), outputs=msg_input
             )
-            with gr.Row():
-                msg_input = gr.Textbox(
-                    placeholder="Ask anything — refund, order status, account help...",
-                    show_label=False,
-                    scale=6,
-                    container=False,
-                    autofocus=True,
+            msg_input.submit(fn=chat, inputs=_inputs, outputs=_outputs, api_name=False).then(
+                fn=lambda: gr.update(value=""), outputs=msg_input
+            )
+            reset_btn.click(fn=reset_chat, inputs=[customer_dd], outputs=_outputs, api_name=False)
+
+            for btn, prompt_text in prompt_btns:
+                btn.click(
+                    fn=functools.partial(inject_prompt, prompt_text),
+                    inputs=[chatbot, session_state, customer_dd],
+                    outputs=_outputs,
+                    api_name=False,
                 )
-                send_btn = gr.Button("Send ➤", variant="primary", scale=1, min_width=80)
 
-        with gr.Column(scale=2, min_width=240):
+        # ================================================================
+        # Tab 2 — Amazon Product Q&A
+        # ================================================================
+        with gr.Tab("🛍️ Amazon Product Q&A"):
 
-            gr.Markdown("#### 👤 Demo Customer")
-            customer_dd = gr.Dropdown(
-                choices=list(DEMO_CUSTOMERS.keys()),
-                value="None (anonymous)",
-                label="",
-                info="Agent looks up this customer when you give their email",
+            amazon_state = gr.State({})
+
+            gr.Markdown("""
+            ### 🛍️ Amazon Product Q&A — 2-Agent System
+            Ask anything about our product catalogue.
+            **Agent 1** (TF-IDF, free) handles direct lookups.
+            **Agent 2** (Gemini flash-lite) handles comparisons & recommendations.
+            """)
+
+            with gr.Row(equal_height=True):
+
+                with gr.Column(scale=4):
+                    amazon_bot = gr.Chatbot(
+                        elem_id="amazon-chat",
+                        label="Amazon Product Assistant",
+                        type="messages",
+                        show_copy_button=True,
+                    )
+                    with gr.Row():
+                        amazon_input = gr.Textbox(
+                            placeholder="Ask about products — specs, comparisons, recommendations...",
+                            show_label=False,
+                            scale=6,
+                            container=False,
+                        )
+                        amazon_send = gr.Button("Ask ➤", variant="primary", scale=1, min_width=80)
+
+                with gr.Column(scale=2, min_width=240):
+
+                    gr.Markdown("#### ⚡ Quick Questions")
+                    amazon_btns = []
+                    for p in AMAZON_DEMO_PROMPTS:
+                        label = p[:44] + ("…" if len(p) > 44 else "")
+                        b = gr.Button(label, size="sm", variant="secondary")
+                        amazon_btns.append((b, p))
+
+                    gr.Markdown("#### 🤖 Active Agent")
+                    amazon_label_display = gr.HTML(value=_amazon_label_html({}))
+
+                    amazon_reset_btn = gr.Button("🔄 New Conversation", variant="secondary", size="sm")
+
+            with gr.Accordion("ℹ️ How the 2-agent system works", open=False):
+                gr.Markdown("""
+                **Routing logic:**
+                1. **Agent 1 (KB Direct)** — pure TF-IDF cosine similarity over the product dataset.
+                   Zero API calls. Returns an answer if confidence ≥ 0.35.
+                2. **Agent 2 (Reasoning)** — activated when:
+                   - Agent 1 confidence is too low, *or*
+                   - The query is inferential (compare, recommend, best for, vs, pros/cons…)
+                   Uses `gemini-2.0-flash-lite` with the top-5 matching products as context.
+
+                **Dataset:** 12 wireless headphones/earbuds — Sony, Apple, Bose, Samsung,
+                Jabra, Anker, JBL, Beats, Sennheiser, 1MORE. Price range $39–$299.
+
+                **Cost:** Agent 1 is always free. Agent 2 uses Gemini only when needed.
+                """)
+
+            # ── Amazon tab event wiring ──────────────────────────────────
+            _amz_inputs  = [amazon_input, amazon_bot, amazon_state]
+            _amz_outputs = [amazon_bot, amazon_state, amazon_label_display]
+
+            amazon_send.click(fn=amazon_chat, inputs=_amz_inputs, outputs=_amz_outputs,
+                              api_name=False).then(
+                fn=lambda: gr.update(value=""), outputs=amazon_input
             )
+            amazon_input.submit(fn=amazon_chat, inputs=_amz_inputs, outputs=_amz_outputs,
+                                api_name=False).then(
+                fn=lambda: gr.update(value=""), outputs=amazon_input
+            )
+            amazon_reset_btn.click(fn=amazon_reset, inputs=[], outputs=_amz_outputs,
+                                   api_name=False)
 
-            gr.Markdown("#### ⚡ Quick Prompts")
-            prompt_btns = []
-            for p in DEMO_PROMPTS:
-                label = p[:44] + ("…" if len(p) > 44 else "")
-                b = gr.Button(label, size="sm", variant="secondary")
-                prompt_btns.append((b, p))
-
-            gr.Markdown("#### 📊 Status")
-            status_display = gr.HTML(value=_status_html({}))
-
-            gr.Markdown("#### 🔧 Last Tool Calls")
-            meta_display = gr.HTML(value=_meta_html({}))
-
-            reset_btn = gr.Button("🔄 New Conversation", variant="secondary", size="sm")
-
-    with gr.Accordion("ℹ️ How the agent works", open=False):
-        gr.Markdown("""
-        **On every message:**
-        1. Escalation pre-check — legal keywords, human request, VIP flag
-        2. Gemini 2.0 Flash processes message + full history with tools
-        3. Tool loop — Gemini calls tools, reads results, continues until done
-        4. Post-check — sentiment scored by Gemini Flash
-
-        **Tools:** `search_knowledge_base` · `lookup_customer` · `create_ticket` ·
-        `check_order_status` · `escalate_to_human` · `send_email_reply`
-
-        **Auto-escalation:** legal words · "speak to human/manager" ·
-        VIP customer · refund > $500 · sentiment < -0.7 · 8+ turns unresolved
-
-        **Cost:** 100% free — uses Gemini 2.0 Flash free tier (1,500 requests/day).
-        Get your free API key at [aistudio.google.com](https://aistudio.google.com/apikey).
-        """)
-
-    # ── Event wiring ────────────────────────────────────────────────────
-    _inputs  = [msg_input, chatbot, session_state, customer_dd]
-    _outputs = [chatbot, session_state, status_display, meta_display]
-
-    # api_name=False on every handler → excluded from schema builder
-    # (prevents gradio_client TypeError on bool JSON Schema values)
-    send_btn.click(fn=chat, inputs=_inputs, outputs=_outputs,
-                   api_name=False).then(
-        fn=lambda: gr.update(value=""), outputs=msg_input
-    )
-    msg_input.submit(fn=chat, inputs=_inputs, outputs=_outputs,
-                     api_name=False).then(
-        fn=lambda: gr.update(value=""), outputs=msg_input
-    )
-    reset_btn.click(fn=reset_chat, inputs=[customer_dd], outputs=_outputs,
-                    api_name=False)
-
-    for btn, prompt_text in prompt_btns:
-        btn.click(
-            fn=functools.partial(inject_prompt, prompt_text),
-            inputs=[chatbot, session_state, customer_dd],
-            outputs=_outputs,
-            api_name=False,
-        )
+            for btn, prompt_text in amazon_btns:
+                btn.click(
+                    fn=functools.partial(amazon_inject, prompt_text),
+                    inputs=[amazon_bot, amazon_state],
+                    outputs=_amz_outputs,
+                    api_name=False,
+                )
 
     # NOTE: Removed demo.load() warm-up to prevent initialization on page load.
-    # Agent initializes on first user message instead (lazy loading).
-    # This prevents unnecessary API calls and respects rate limits.
+    # Both agents initialise lazily on first use — zero startup API calls.
 
 
 # ---------------------------------------------------------------------------
